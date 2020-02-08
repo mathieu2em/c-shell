@@ -38,18 +38,27 @@ char* readLine (void) {
 /* split_args doesn't free str */
 char **split_args (char *str) {
     char **argv;
-    int i, j = 0, n = 0;
+    int i = 0;
+    int j = 0;
+    int k = 0;
+    int n = 0;
 
     /*
        we have to count how many groups of spaces of 1+ space
        we have so we can allocate the right array size
     */
-    for (i = 0; str[i]; i++) {
-        if (str[i] == ' ')
+    while(str[i] && (str[i] == ' ' || str[i] == '\t')) i++;
+    for (; str[i]; i++) {
+        if ( (str[i] == ' ' || str[i] == '\t') && str[i+1] != ' ' && str[i+1] != '\t'){
             n++;
+        }
     }
 
-    argv = malloc(sizeof(char*) * n);
+    /*
+       we use the number counted to allocate an array of strings containing the command
+       written to the terminal
+     */
+    argv = malloc(sizeof(char*) * n+1);
 
     if (!argv) {
         fprintf(stderr, "argv could not be allocated\n");
@@ -58,18 +67,32 @@ char **split_args (char *str) {
 
     n = 0;
 
-    for (i = 0; str[i]; i++, j++) {
-        if (str[i] == ' ') {
-            argv[j] = malloc(sizeof(char) * (i - n));
+    /*
+      now we have to full this array with the elements
+    */
+    i = 0;
+    /*
+      exception case of line starting with spaces ex: '_____echo_"hi!"'
+    */
+    while(str[i] && (str[i] == ' ' || str[i] == '\t')) i++;
+    n = i;
+    for (; str[n]; i++) {
+        if ( (str[i] == ' ') || !str[i] ) {
+            argv[j] = malloc(sizeof(char)*(i - n));
 
             if (!argv[j]) {
                 fprintf(stderr, "argv[%d] could not be allocated\n", j);
                 return NULL;
             }
 
-            argv[j][i - (++n)] = '\0';
-            for (; n < i; n++)
-                argv[j][i - n] = str[i - n];
+            for (k=0; n < i; n++, k++)
+                argv[j][k] = str[n];
+            j++;
+
+            while(str[i] && (str[i] == ' ' || str[i] == '\t')){
+                i++;
+            }
+            n = i;
         }
     }
 
@@ -77,10 +100,18 @@ char **split_args (char *str) {
 }
 
 void shell (void) {
+    char **argv;
+    int j = 0;
     char *line = readLine();
 
-    puts(line);
 
+
+
+    puts(line);
+    argv = split_args(line);
+    while(argv[j]) {
+        printf("%s", argv[j]);
+    }
     free(line);
 }
 

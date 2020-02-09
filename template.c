@@ -58,7 +58,9 @@ char **split_args (char *str) {
        we use the number counted to allocate an array of strings containing the command
        written to the terminal
      */
-    argv = malloc(sizeof(char*) * n+1);
+    argv = malloc(sizeof(char*) * n+2);
+    argv[n+1]= malloc(sizeof(char));
+    argv[n+1]='\0';
 
     if (!argv) {
         fprintf(stderr, "argv could not be allocated\n");
@@ -110,7 +112,8 @@ void shell (void) {
     puts(line);
     argv = split_args(line);
     while(argv[j]) {
-        printf("%s", argv[j]);
+        printf("%s\n", argv[j]);
+        j++;
     }
     free(line);
 }

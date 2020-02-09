@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define true 1
 #define false 0
@@ -101,20 +102,37 @@ char **split_args (char *str) {
     return argv;
 }
 
+/*
+ * a function that verifies if the arg is a valid function
+ */
+char* whichFunction (char* fun) {
+    if ( strcmp(fun, "echo") == 0 ){
+        return 1;
+    } else return 9;
+}
+
 void shell (void) {
     char **argv;
+    int i = 0;
     int j = 0;
     char *line = readLine();
 
-
-
-
-    puts(line);
+    puts(line); // TODO test
     argv = split_args(line);
+    //TODO test
     while(argv[j]) {
         printf("%s\n", argv[j]);
         j++;
     }
+    // ^^^^^^^^^^^
+    i = whichFunction(argv[j]);
+    if( i==1 ){
+        printf("%s\n", argv[++j]);
+    }
+
+    j=0;
+    while(argv[j]) free(argv[j++]);
+    free(argv);
     free(line);
 }
 

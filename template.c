@@ -114,13 +114,45 @@ free_argv:
     return NULL;
 }
 
+enum { NORMAL, SHBG, SHPIPE, SHAND, SHOR }; /* execution type */
+
 /*
   il faut quon fork le process
   pi dans le child process quon fasse le exec
   pi dans lautre process faut quon check squi spasse
 */
-int execute (char** argv) {
-    
+int execute (char **argv) {
+    int i, type;
+
+    for (i = 0; argv[i] && argv[i][0] != '&' || argv[i][0] != '|'; i++)
+        ;
+
+    if (argv[i][0] == '&') {
+        if (argv[i][1] && argv[i][1] == '&' && !argv[i][2]) {
+            type = SHAND;
+        } else if (!argv[i][1]) {
+            type = SHBG;
+        } else {
+            fprintf(stderr, "bash: syntax error near unexcepted token '%c'\n",
+                    argv[i][2] ? argv[i][2] : argv[i][1]);
+            return -1;
+        }
+        argv[i] = NULL;
+    } else if (argv[i][0] == '|') {
+        if (argv[i][1] && argv[i][1] == '|' && !argv[i][2]) {
+            type = SHOR;
+        } else if (!argv[i][1]) {
+            type = SHPIPE;
+        } else {
+            fprintf(stderr, "bash: syntax error near unexcepted token '%c'\n",
+                    argv[i][2] ? argv[i][2] : argv[i][1]);
+            return -1;
+        }
+    } else {
+        type = NORMAL;
+    }
+
+    return -1;
 }
 
 void shell (void) {

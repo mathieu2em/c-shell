@@ -8,6 +8,7 @@
 
 #define MIN_STR 128
 #define IS_SPACE(c) ((c) == ' ' || (c) == '\t')
+#define IS_SHELL_SPECIAL(c) ((c) == '&' || (c) == '|')
 
 char *readLine (void);
 char **split_args (char *);
@@ -56,6 +57,11 @@ char **split_args (char *str) {
 
     /* counting no of args */
     for (; str[i]; i++) {
+        /* special case for &'s and |'s */
+        if (IS_SHELL_SPECIAL(str[i]){
+            n++;
+            while(IS_SHELL_SPECIAL(++i)); /* only one block for motton de |&|&... */
+        }
         if (IS_SPACE(str[i]) && str[i+1] && !IS_SPACE(str[i+1]))
             n++;
     }
@@ -71,6 +77,23 @@ char **split_args (char *str) {
     n = 0;
     i = j; /* restore position of first non-whitespace char */
     for (; str[i]; i++) {
+        if (IS_SHELL_SPECIAL(str[i])) {
+            while(IS_SHELL_SPECIAL(++i));
+            argv[n] = malloc(sizeof(char) * (i - j + 1));
+
+            if (!argv[n]) {
+                fprintf(stderr, "argv[%d] could not be allocated\n", n--);
+                goto free_argv;
+            }
+
+            strncpy(argv[n], str + j, i - j);
+            argv[n++][i - j] = '\0';
+
+            /* skip remaining spaces */
+            while(str[i] && IS_SPACE(str[i]))
+                i++;
+            j = i; /* prepare to read next arg */
+        }
         if (IS_SPACE(str[i])) {
             argv[n] = malloc(sizeof(char) * (i - j + 1));
 

@@ -40,6 +40,21 @@ char* readLine (void) {
     return line;
 }
 
+#define inSpecial(c) ((c) == '&' || (c) == '|')
+#define inSpace(c) ((c) == ' ' || (c) == '\t')
+#define inWord(c) (!(inSpecial(c) || inSpace(c)))
+int count_args (char *str) {
+    int n = 1;
+    int i = 0;
+
+    for(;str[i];i++){
+        if(inSpecial(str[i]) && inSpace(str[i+1])) n++;
+        else if(inWord(str[i]) && inSpecial(str[i+1])) n++;
+        else if(inWord(str[i]) && inSpace(str[i+1])) n++;
+    }
+    return n;
+}
+
 /*
  * build_argv builds the arguments array to be passed to execvp
  * it doesn't free str.
@@ -52,19 +67,10 @@ char **split_args (char *str) {
     while(str[i] && IS_SPACE(str[i]))
         i++;
 
+    n = count_args(str+i); /* le + i optimise */
+
     /* save this position, so don't have to skip spaces twice */
     j = i;
-
-    /* counting no of args */
-    for (; str[i]; i++) {
-        /* special case for &'s and |'s */
-        if (IS_SHELL_SPECIAL(str[i]){
-            n++;
-            while(IS_SHELL_SPECIAL(++i)); /* only one block for motton de |&|&... */
-        }
-        if (IS_SPACE(str[i]) && str[i+1] && !IS_SPACE(str[i+1]))
-            n++;
-    }
 
     argv = malloc(sizeof(char *) * (n + 1));
 

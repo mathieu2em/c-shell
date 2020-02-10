@@ -54,7 +54,6 @@ int count_args (char *str) {
         else if(inWord(str[i]) && inSpace(str[i+1])) n++;
         else if(!inSpace(str[i]) && !str[i+1]) n++;
     }
-    printf("%d", n);
     return n;
 }
 
@@ -83,34 +82,23 @@ char **split_args (char *str) {
     n = 0;
     j = i;
     for (; str[i]; i++) {
-        if((inSpecial(str[j]) && (inSpace(str[i+1])||inWord(str[i+1]))) ||
+        if((inSpace(str[i]) && inWord(str[i+1]))||(inSpace(str[i]) && inSpecial(str[i+1]))) j = i+1;
+        if((inSpecial(str[i]) && inSpace(str[i+1])) ||
+           (inSpecial(str[i]) && inWord(str[i+1])) ||
            (inWord(str[i]) && inSpecial(str[i+1])) ||
            (inWord(str[i]) && inSpace(str[i+1])) ||
-           (!inSpace(str[i]) && !str[i+1]) {
-            argv[n] = malloc(sizeof(char) * (i - j + 1));
+           (!inSpace(str[i]) && !str[i+1])) {
+            argv[n] = malloc(sizeof(char) * (i+1 - j + 1));
 
             if (!argv[n]) {
                 fprintf(stderr, "argv[%d] could not be allocated\n", n--);
                 goto free_argv;
             }
-            strncpy(argv[n], str + j, i - j);
-            argv[n++][i - j] = '\0';
-            j=i;
+            strncpy(argv[n], str + j, i+1 - j);
+            argv[n++][i+1 - j] = '\0';
+            j=i+1;
 
         }
-    }
-
-    /* if there is no whitespace at end of line, there is still an arg */
-    if (i-1 != j) {
-        argv[n] = malloc(sizeof(char) * (i - j + 1));
-
-        if (!argv[n]) {
-            fprintf(stderr, "argv[%d] could not be allocated\n", n--);
-            goto free_argv;
-        }
-
-        strncpy(argv[n], str + j, i - j);
-        argv[n++][i - j] = '\0';
     }
 
     argv[n] = NULL;

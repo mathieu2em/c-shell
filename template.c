@@ -10,7 +10,7 @@
 #define IS_SPACE(c) ((c) == ' ' || (c) == '\t')
 #define IS_SHELL_SPECIAL(c) ((c) == '&' || (c) == '|')
 
-enum { NORMAL, BACKGROUND, PIPED, AND, OR };
+enum { NORMAL, BACKGROUND, AND, OR };
 
 struct command {
     char **argv;
@@ -18,10 +18,9 @@ struct command {
 };
 
 char *readLine (void);
-char **split_args (char *);
-/* parse must parse args given by split_args into an array of command struct */
+char **tokenize (char *);
+/* parse must parse args given by tokenize into an array of command struct */
 struct command *parse (char **);
-    
 
 /* readline allocate a new char array */
 char* readLine (void) {
@@ -71,7 +70,7 @@ int count_args (char *str) {
  * build_argv builds the arguments array to be passed to execvp
  * it doesn't free str.
  */
-char **split_args (char *str) {
+char **tokenize (char *str) {
     char **argv;
     int i = 0, j = 0, n = 1;
 
@@ -91,7 +90,7 @@ char **split_args (char *str) {
 
     n = 0;
     j = i;
-    
+
     for (; str[i]; i++) {
         if((inSpace(str[i]) && inWord(str[i+1])) ||
            (inSpace(str[i]) && inSpecial(str[i+1])))
@@ -124,6 +123,8 @@ free_argv:
     free(argv);
     return NULL;
 }
+
+
 
 /*
   il faut quon fork le process
@@ -164,13 +165,54 @@ int execute (char **argv) {
 }
 */
 
+struct command *parse (char **argv){
+    int i = 0;
+    int n = 1;
+    struct command *c;
+    /* count commands */
+    for(;argv[i];i++){
+        if(argv[i][0] == '&'){
+            if(!argv[i][1]){
+                if(argv[i+1]){
+                    fprintf(stderr,"THE & IS NOT AT END OF LINE\n");
+                    return NULL;
+                }
+            } else if (argv[i][1] == '&' && !argv[i][2]){
+                n++;
+            } else {
+                /*
+                 *  && is the only accepted elem starting with &
+                 *  if we aren't at the end
+                 */
+                fprintf(stderr,"invalid syntax!\n");
+                return NULL;
+            }
+        } else if (argv[i][0]=='|'){
+            if (argv[i][1] == '|' && !argv[2]){
+                n++;
+            } else {
+                /* || is the only accepted elem starting with | */
+                fprintf(stderr, "invalid syntax|\n");
+                return NULL;
+            }
+        }
+    }
+    /* now allocate our array of commands */
+    c = malloc(sizeof(struct command) * n);
+    if(!c){
+        fprintf(stderr, "lack of memory");
+        return NULL;
+    }
+    /* now we want 
+}
+
 void shell (void) {
     char **argv;
     int j = 0;
 
     /* temporary testing */
     char *line = readLine();
-    argv = split_args(line);
+    argv = tokenize(line);
     for (j = 0; argv[j]; j++)
         printf("%s\n", argv[j]);
 

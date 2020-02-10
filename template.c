@@ -10,8 +10,18 @@
 #define IS_SPACE(c) ((c) == ' ' || (c) == '\t')
 #define IS_SHELL_SPECIAL(c) ((c) == '&' || (c) == '|')
 
+enum { NORMAL, BACKGROUND, PIPED, AND, OR };
+
+struct command {
+    char **argv;
+    char type;
+};
+
 char *readLine (void);
 char **split_args (char *);
+/* parse must parse args given by split_args into an array of command struct */
+struct command *parse (char **);
+    
 
 /* readline allocate a new char array */
 char* readLine (void) {
@@ -81,8 +91,11 @@ char **split_args (char *str) {
 
     n = 0;
     j = i;
+    
     for (; str[i]; i++) {
-        if((inSpace(str[i]) && inWord(str[i+1]))||(inSpace(str[i]) && inSpecial(str[i+1]))) j = i+1;
+        if((inSpace(str[i]) && inWord(str[i+1])) ||
+           (inSpace(str[i]) && inSpecial(str[i+1])))
+            j = i+1;
         if((inSpecial(str[i]) && inSpace(str[i+1])) ||
            (inSpecial(str[i]) && inWord(str[i+1])) ||
            (inWord(str[i]) && inSpecial(str[i+1])) ||
@@ -105,20 +118,17 @@ char **split_args (char *str) {
 
     return argv;
 
-    free_argv:
+free_argv:
     for (; n >= 0; n--)
         free(argv[n]);
     free(argv);
     return NULL;
 }
 
-enum { NORMAL, SHBG, SHPIPE, SHAND, SHOR }; /* execution type */
-
 /*
   il faut quon fork le process
   pi dans le child process quon fasse le exec
   pi dans lautre process faut quon check squi spasse
-*/
 int execute (char **argv) {
     int i, type;
 
@@ -152,6 +162,7 @@ int execute (char **argv) {
 
     return -1;
 }
+*/
 
 void shell (void) {
     char **argv;

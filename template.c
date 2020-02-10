@@ -28,8 +28,8 @@ char* readLine (void) {
     while ((c = getchar()) != EOF && c != '\n') {
         if (n == len - 1) {
             len *= 2;
-             /* extend array size, shouldn't change content
-                according to `man 3 realloc` */
+            /* extend array size, shouldn't change content
+               according to `man 3 realloc` */
             line = (char*) realloc(line, sizeof(char) * len);
         }
         line[n++] = c;
@@ -44,11 +44,12 @@ char* readLine (void) {
 #define inSpace(c) ((c) == ' ' || (c) == '\t')
 #define inWord(c) (!(inSpecial(c) || inSpace(c)))
 int count_args (char *str) {
-    int n = 1;
+    int n = 0;
     int i = 0;
 
     for(;str[i];i++){
         if(inSpecial(str[i]) && inSpace(str[i+1])) n++;
+        else if(inSpecial(str[i]) && inWord(str[i+1])) n++;
         else if(inWord(str[i]) && inSpecial(str[i+1])) n++;
         else if(inWord(str[i]) && inSpace(str[i+1])) n++;
         else if(!inSpace(str[i]) && !str[i+1]) n++;
@@ -81,6 +82,7 @@ char **split_args (char *str) {
 
     n = 0;
     for (; str[i]; i++) {
+
         if (IS_SHELL_SPECIAL(str[i])) {
             while(IS_SHELL_SPECIAL(++i));
             argv[n] = malloc(sizeof(char) * (i - j + 1));
@@ -134,7 +136,7 @@ char **split_args (char *str) {
 
     return argv;
 
-free_argv:
+    free_argv:
     for (; n >= 0; n--)
         free(argv[n]);
     free(argv);

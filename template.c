@@ -10,7 +10,7 @@
 #define IS_SPACE(c) ((c) == ' ' || (c) == '\t')
 
 char *readLine (void);
-char **build_argv (char *);
+char **split_args (char *);
 
 /* readline allocate a new char array */
 char* readLine (void) {
@@ -41,9 +41,9 @@ char* readLine (void) {
 
 /*
  * build_argv builds the arguments array to be passed to execvp
- * it doesn't free str
+ * it doesn't free str.
  */
-char **build_argv (char *str) {
+char **split_args (char *str) {
     char **argv;
     int i = 0, j = 0, n = 1;
 
@@ -53,7 +53,7 @@ char **build_argv (char *str) {
 
     /* save this position, so don't have to skip spaces twice */
     j = i;
-    
+
     /* counting no of args */
     for (; str[i]; i++) {
         if (IS_SPACE(str[i]) && str[i+1] && !IS_SPACE(str[i+1]))
@@ -93,7 +93,7 @@ char **build_argv (char *str) {
     /* if there is no whitespace at end of line, there is still an arg */
     if (i-1 != j) {
         argv[n] = malloc(sizeof(char) * (i - j + 1));
-        
+
         if (!argv[n]) {
             fprintf(stderr, "argv[%d] could not be allocated\n", n--);
             goto free_argv;
@@ -102,26 +102,34 @@ char **build_argv (char *str) {
         strncpy(argv[n], str + j, i - j);
         argv[n++][i - j] = '\0';
     }
-    
+
     argv[n] = NULL;
 
     return argv;
-    
- free_argv:
+
+free_argv:
     for (; n >= 0; n--)
         free(argv[n]);
     free(argv);
     return NULL;
 }
 
+/*
+  il faut quon fork le process
+  pi dans le child process quon fasse le exec
+  pi dans lautre process faut quon check squi spasse
+*/
+int execute (char** argv) {
+    
+}
+
 void shell (void) {
     char **argv;
-    int i = 0;
     int j = 0;
 
     /* temporary testing */
     char *line = readLine();
-    argv = build_argv(line);
+    argv = split_args(line);
     for (j = 0; argv[j]; j++)
         printf("%s\n", argv[j]);
 

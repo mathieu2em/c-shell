@@ -6,10 +6,11 @@
 #define false 0
 #define bool int
 
-#define MIN_STR 128;
+#define MIN_STR 128
+#define IS_SPACE(c) ((c) == ' ' || (c) == '\t')
 
 char *readLine (void);
-char **split_args (char *);
+char **build_argv (char *);
 
 /* readline allocate a new char array */
 char* readLine (void) {
@@ -26,7 +27,9 @@ char* readLine (void) {
     while ((c = getchar()) != EOF && c != '\n') {
         if (n == len - 1) {
             len *= 2;
-            line = (char*) realloc(line, sizeof(char) * len); /* extend array size */
+             /* extend array size, shouldn't change content
+                according to `man 3 realloc` */
+            line = (char*) realloc(line, sizeof(char) * len);
         }
         line[n++] = c;
     }
@@ -36,102 +39,95 @@ char* readLine (void) {
     return line;
 }
 
-/* split_args doesn't free str */
-char **split_args (char *str) {
+/*
+ * build_argv builds the arguments array to be passed to execvp
+ * it doesn't free str
+ */
+char **build_argv (char *str) {
     char **argv;
-    int i = 0;
-    int j = 0;
-    int k = 0;
-    int n = 0;
+    int i = 0, j = 0, n = 1;
 
-    /*
-       we have to count how many groups of spaces of 1+ space
-       we have so we can allocate the right array size
-    */
-    while(str[i] && (str[i] == ' ' || str[i] == '\t')) i++;
+    /* skip spaces in front */
+    while(str[i] && IS_SPACE(str[i]))
+        i++;
+
+    /* save this position, so don't have to skip spaces twice */
+    j = i;
+    
+    /* counting no of args */
     for (; str[i]; i++) {
-        if ( (str[i] == ' ' || str[i] == '\t') && str[i+1] != ' ' && str[i+1] != '\t'){
+        if (IS_SPACE(str[i]) && str[i+1] && !IS_SPACE(str[i+1]))
             n++;
-        }
     }
 
-    /*
-       we use the number counted to allocate an array of strings containing the command
-       written to the terminal
-     */
-    argv = malloc(sizeof(char*) * n+2);
-    argv[n+1]= malloc(sizeof(char));
-    argv[n+1]='\0';
+    argv = malloc(sizeof(char *) * (n + 1));
 
     if (!argv) {
-        fprintf(stderr, "argv could not be allocated\n");
+        fprintf(stderr, "argument array (argv) could not be allocated\n");
+        /* no need to free argv */
         return NULL;
     }
 
     n = 0;
+    i = j; /* restore position of first non-whitespace char */
+    for (; str[i]; i++) {
+        if (IS_SPACE(str[i])) {
+            argv[n] = malloc(sizeof(char) * (i - j + 1));
 
-    /*
-      now we have to full this array with the elements
-    */
-    i = 0;
-    /*
-      exception case of line starting with spaces ex: '_____echo_"hi!"'
-    */
-    while(str[i] && (str[i] == ' ' || str[i] == '\t')) i++;
-    n = i;
-    for (; str[n]; i++) {
-        if ( (str[i] == ' ') || !str[i] ) {
-            argv[j] = malloc(sizeof(char)*(i - n));
-
-            if (!argv[j]) {
-                fprintf(stderr, "argv[%d] could not be allocated\n", j);
-                return NULL;
+            if (!argv[n]) {
+                fprintf(stderr, "argv[%d] could not be allocated\n", n--);
+                goto free_argv;
             }
 
-            for (k=0; n < i; n++, k++)
-                argv[j][k] = str[n];
-            j++;
+            strncpy(argv[n], str + j, i - j);
+            argv[n++][i - j] = '\0';
 
-            while(str[i] && (str[i] == ' ' || str[i] == '\t')){
+            /* skip remaining spaces */
+            while(str[i] && IS_SPACE(str[i]))
                 i++;
-            }
-            n = i;
+
+            j = i; /* prepare to read next arg */
         }
     }
 
-    return argv;
-}
+    /* if there is no whitespace at end of line, there is still an arg */
+    if (i-1 != j) {
+        argv[n] = malloc(sizeof(char) * (i - j + 1));
+        
+        if (!argv[n]) {
+            fprintf(stderr, "argv[%d] could not be allocated\n", n--);
+            goto free_argv;
+        }
 
-/*
- * a function that verifies if the arg is a valid function
- */
-char* whichFunction (char* fun) {
-    if ( strcmp(fun, "echo") == 0 ){
-        return 1;
-    } else return 9;
+        strncpy(argv[n], str + j, i - j);
+        argv[n++][i - j] = '\0';
+    }
+    
+    argv[n] = NULL;
+
+    return argv;
+    
+ free_argv:
+    for (; n >= 0; n--)
+        free(argv[n]);
+    free(argv);
+    return NULL;
 }
 
 void shell (void) {
     char **argv;
     int i = 0;
     int j = 0;
+
+    /* temporary testing */
     char *line = readLine();
-
-    puts(line); // TODO test
-    argv = split_args(line);
-    //TODO test
-    while(argv[j]) {
+    argv = build_argv(line);
+    for (j = 0; argv[j]; j++)
         printf("%s\n", argv[j]);
-        j++;
-    }
-    // ^^^^^^^^^^^
-    i = whichFunction(argv[j]);
-    if( i==1 ){
-        printf("%s\n", argv[++j]);
-    }
 
-    j=0;
-    while(argv[j]) free(argv[j++]);
+    /* clean up */
+    for (j = 0; argv[j]; j++)
+        free(argv[j]);
     free(argv);
     free(line);
 }

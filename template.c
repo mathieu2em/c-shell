@@ -51,7 +51,9 @@ int count_args (char *str) {
         if(inSpecial(str[i]) && inSpace(str[i+1])) n++;
         else if(inWord(str[i]) && inSpecial(str[i+1])) n++;
         else if(inWord(str[i]) && inSpace(str[i+1])) n++;
+        else if(!inSpace(str[i]) && !str[i+1]) n++;
     }
+    printf("%d", n);
     return n;
 }
 
@@ -69,9 +71,6 @@ char **split_args (char *str) {
 
     n = count_args(str+i); /* le + i optimise */
 
-    /* save this position, so don't have to skip spaces twice */
-    j = i;
-
     argv = malloc(sizeof(char *) * (n + 1));
 
     if (!argv) {
@@ -81,7 +80,6 @@ char **split_args (char *str) {
     }
 
     n = 0;
-    i = j; /* restore position of first non-whitespace char */
     for (; str[i]; i++) {
         if (IS_SHELL_SPECIAL(str[i])) {
             while(IS_SHELL_SPECIAL(++i));

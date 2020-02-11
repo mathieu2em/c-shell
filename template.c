@@ -210,10 +210,11 @@ void shell (void) {
     struct command *cmds;
     int i = 0, j = 0;
 
-    /* temporary testing */
     char *line = readLine();
     tokens = tokenize(line);
     cmds = parse(tokens);
+
+    /* temporary testing */
     for (i = 0; cmds[i].argv; i++) {
         printf("argv: \n  ");
         for (j = 0; cmds[i].argv[j]; j++)

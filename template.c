@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #define true 1
 #define false 0
@@ -23,6 +25,7 @@ int count_tokens (char *);
 char **tokenize (char *);
 struct command *parse (char **);
 int execute (struct command *);
+void free_commands (struct command *);
 
 /* readline allocate a new char array */
 char* readLine (void) {
@@ -195,14 +198,56 @@ struct command *parse (char **tokens){
     return c;
 }
 
+int execute_cmd (struct command cmd) {
+    int child_code = 0;
+    pid_t pid;
+    
+    pid = fork();
+    if (pid < 0) {
+        fprintf(stderr, "could not fork process\n");
+        return -1;
+    } else if (pid == 0) {
+        child_code = execvp(cmd.argv[0], cmd.argv);
+    } else if (cmd.type != BACKGROUND) {
+        child_code = wait(&child_code);
+    }
+
+    return child_code;
+}
 
 /*
   il faut quon fork le process
   pi dans le child process quon fasse le exec
   pi dans lautre process faut quon check squi spasse */
-int execute (struct command *cmd) {
+int execute (struct command *cmds) {
+    int i, ret;
+    
+    for (i = 0; cmds[i].argv; i++) {
+        ret = execute_cmd(cmds[i]);
 
-    return -1;
+        if (ret < 0 && cmds[i].type != OR) {
+            fprintf(stderr, "bash: %s: command not found\n", cmds[i].argv[0]);
+            free_commands(cmds);
+            return -1;
+        } else if (ret == 0) {
+
+        } else {
+            
+        }
+    }
+
+    free_commands(cmds);
+    return 0;
+}
+
+void free_commands (struct command *cmds) {
+    int i, j;
+    for (i = 0; cmds[i].argv; i++) {
+        for (j = 0; cmds[i].argv[j]; j++)
+            free(cmds[i].argv[j]);
+    }
+    free(cmds[0].argv);
+    free(cmds);
 }
 
 void shell (void) {
@@ -214,7 +259,10 @@ void shell (void) {
     tokens = tokenize(line);
     cmds = parse(tokens);
 
-    /* temporary testing */
+    puts("after error?");
+    
+    execute(cmds);
+    /* temporary testing
     for (i = 0; cmds[i].argv; i++) {
         printf("argv: \n  ");
         for (j = 0; cmds[i].argv[j]; j++)
@@ -227,13 +275,7 @@ void shell (void) {
         case OR: puts("OR"); break;
         }
     }
-
-    for (i = 0; cmds[i].argv; i++) {
-        for (j = 0; cmds[i].argv[j]; j++)
-            free(cmds[i].argv[j]);
-    }
-    free(cmds[0].argv);
-    free(cmds);
+    */
 }
 
 /*

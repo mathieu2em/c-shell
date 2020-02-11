@@ -22,6 +22,7 @@ char *readLine (void);
 int count_tokens (char *);
 char **tokenize (char *);
 struct command *parse (char **);
+int execute (struct command *);
 
 /* readline allocate a new char array */
 char* readLine (void) {
@@ -54,16 +55,16 @@ int count_tokens (char *str) {
     int n = 0;
     int i = 0;
 
-    for(;str[i];i++){
-        if(IS_SPECIAL(str[i]) && IS_SPACE(str[i+1])) n++;
-        else if(IS_SPECIAL(str[i]) && INSIDE_WORD(str[i+1])) n++;
-        else if(INSIDE_WORD(str[i]) && IS_SPECIAL(str[i+1])) n++;
-        else if(INSIDE_WORD(str[i]) && IS_SPACE(str[i+1])) n++;
-        else if(!IS_SPACE(str[i]) && !str[i+1]) n++;
+    for (; str[i]; i++) {
+        if ((IS_SPECIAL(str[i]) && IS_SPACE(str[i+1])) ||
+            (IS_SPECIAL(str[i]) && INSIDE_WORD(str[i+1])) ||
+            (INSIDE_WORD(str[i]) && IS_SPECIAL(str[i+1])) ||
+            (INSIDE_WORD(str[i]) && IS_SPACE(str[i+1])) ||
+            (!IS_SPACE(str[i]) && !str[i+1]))
+            n++;
     }
     return n;
 }
-
 
 /*
  * build_argv builds the arguments array to be passed to execvp
@@ -125,47 +126,6 @@ free_argv:
     free(str);
     return NULL;
 }
-
-
-
-/*
-  il faut quon fork le process
-  pi dans le child process quon fasse le exec
-  pi dans lautre process faut quon check squi spasse
-int execute (char **argv) {
-    int i, type;
-
-    for (i = 0; argv[i] && argv[i][0] != '&' || argv[i][0] != '|'; i++)
-        ;
-
-    if (argv[i][0] == '&') {
-        if (argv[i][1] && argv[i][1] == '&' && !argv[i][2]) {
-            type = SHAND;
-        } else if (!argv[i][1]) {
-            type = SHBG;
-        } else {
-            fprintf(stderr, "bash: syntax error near unexcepted token '%c'\n",
-                    argv[i][2] ? argv[i][2] : argv[i][1]);
-            return -1;
-        }
-        argv[i] = NULL;
-    } else if (argv[i][0] == '|') {
-        if (argv[i][1] && argv[i][1] == '|' && !argv[i][2]) {
-            type = SHOR;
-        } else if (!argv[i][1]) {
-            type = SHPIPE;
-        } else {
-            fprintf(stderr, "bash: syntax error near unexcepted token '%c'\n",
-                    argv[i][2] ? argv[i][2] : argv[i][1]);
-            return -1;
-        }
-    } else {
-        type = NORMAL;
-    }
-
-    return -1;
-}
-*/
 
 const char* syntax_error_fmt = "bash: syntax error near unexcepted token `%s'\n";
 
@@ -233,6 +193,16 @@ struct command *parse (char **tokens){
     c[n].argv = NULL; /* to know where the array ends */
 
     return c;
+}
+
+
+/*
+  il faut quon fork le process
+  pi dans le child process quon fasse le exec
+  pi dans lautre process faut quon check squi spasse */
+int execute (struct command *cmd) {
+
+    return -1;
 }
 
 void shell (void) {

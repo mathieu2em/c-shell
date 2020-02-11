@@ -8,7 +8,8 @@
 
 #define MIN_STR 128
 #define IS_SPACE(c) ((c) == ' ' || (c) == '\t')
-#define IS_SHELL_SPECIAL(c) ((c) == '&' || (c) == '|')
+#define IS_SPECIAL(c) ((c) == '&' || (c) == '|')
+#define INSIDE_WORD(c) (!(IS_SPECIAL(c) || IS_SPACE(c)))
 
 enum { NORMAL, BACKGROUND, AND, OR };
 
@@ -18,8 +19,8 @@ struct command {
 };
 
 char *readLine (void);
+int count_tokens (char *);
 char **tokenize (char *);
-/* parse must parse args given by tokenize into an array of command struct */
 struct command *parse (char **);
 
 /* readline allocate a new char array */
@@ -49,26 +50,23 @@ char* readLine (void) {
     return line;
 }
 
-#define inSpecial(c) ((c) == '&' || (c) == '|')
-#define inSpace(c) ((c) == ' ' || (c) == '\t')
-#define inWord(c) (!(inSpecial(c) || inSpace(c)))
-int count_args (char *str) {
+int count_tokens (char *str) {
     int n = 0;
     int i = 0;
 
     for(;str[i];i++){
-        if(inSpecial(str[i]) && inSpace(str[i+1])) n++;
-        else if(inSpecial(str[i]) && inWord(str[i+1])) n++;
-        else if(inWord(str[i]) && inSpecial(str[i+1])) n++;
-        else if(inWord(str[i]) && inSpace(str[i+1])) n++;
-        else if(!inSpace(str[i]) && !str[i+1]) n++;
+        if(IS_SPECIAL(str[i]) && IS_SPACE(str[i+1])) n++;
+        else if(IS_SPECIAL(str[i]) && INSIDE_WORD(str[i+1])) n++;
+        else if(INSIDE_WORD(str[i]) && IS_SPECIAL(str[i+1])) n++;
+        else if(INSIDE_WORD(str[i]) && IS_SPACE(str[i+1])) n++;
+        else if(!IS_SPACE(str[i]) && !str[i+1]) n++;
     }
     return n;
 }
 
+
 /*
  * build_argv builds the arguments array to be passed to execvp
- * it doesn't free str.
  */
 char **tokenize (char *str) {
     char **argv;
@@ -78,13 +76,14 @@ char **tokenize (char *str) {
     while(str[i] && IS_SPACE(str[i]))
         i++;
 
-    n = count_args(str+i); /* le + i optimise */
+    n = count_tokens(str+i); /* le + i optimise */
 
     argv = malloc(sizeof(char *) * (n + 1));
 
     if (!argv) {
         fprintf(stderr, "argument array (argv) could not be allocated\n");
         /* no need to free argv */
+        free(str);
         return NULL;
     }
 
@@ -92,14 +91,14 @@ char **tokenize (char *str) {
     j = i;
 
     for (; str[i]; i++) {
-        if((inSpace(str[i]) && inWord(str[i+1])) ||
-           (inSpace(str[i]) && inSpecial(str[i+1])))
+        if((IS_SPACE(str[i]) && INSIDE_WORD(str[i+1])) ||
+           (IS_SPACE(str[i]) && IS_SPECIAL(str[i+1])))
             j = i+1;
-        if((inSpecial(str[i]) && inSpace(str[i+1])) ||
-           (inSpecial(str[i]) && inWord(str[i+1])) ||
-           (inWord(str[i]) && inSpecial(str[i+1])) ||
-           (inWord(str[i]) && inSpace(str[i+1])) ||
-           (!inSpace(str[i]) && !str[i+1])) {
+        if((IS_SPECIAL(str[i]) && IS_SPACE(str[i+1])) ||
+           (IS_SPECIAL(str[i]) && INSIDE_WORD(str[i+1])) ||
+           (INSIDE_WORD(str[i]) && IS_SPECIAL(str[i+1])) ||
+           (INSIDE_WORD(str[i]) && IS_SPACE(str[i+1])) ||
+           (!IS_SPACE(str[i]) && !str[i+1])) {
             argv[n] = malloc(sizeof(char) * (i+1 - j + 1));
 
             if (!argv[n]) {
@@ -115,12 +114,15 @@ char **tokenize (char *str) {
 
     argv[n] = NULL;
 
+    free(str);
+
     return argv;
 
 free_argv:
     for (; n >= 0; n--)
         free(argv[n]);
     free(argv);
+    free(str);
     return NULL;
 }
 
@@ -165,62 +167,102 @@ int execute (char **argv) {
 }
 */
 
-struct command *parse (char **argv){
-    int i = 0;
-    int n = 1;
+const char* syntax_error_fmt = "bash: syntax error near unexcepted token `%s'\n";
+
+struct command *parse (char **tokens){
+    int i, j, n = 1;
     struct command *c;
     /* count commands */
-    for(;argv[i];i++){
-        if(argv[i][0] == '&'){
-            if(!argv[i][1]){
-                if(argv[i+1]){
-                    fprintf(stderr,"THE & IS NOT AT END OF LINE\n");
+    for (i = 0; tokens[i]; i++) {
+        if (tokens[i][0] == '&') {
+            if (!tokens[i][1]) {
+                if (tokens[i+1]) {
+                    fprintf(stderr, syntax_error_fmt, tokens[i+1]);
                     return NULL;
                 }
-            } else if (argv[i][1] == '&' && !argv[i][2]){
+            } else if (tokens[i][1] == '&' && !tokens[i][2]) {
                 n++;
             } else {
                 /*
                  *  && is the only accepted elem starting with &
                  *  if we aren't at the end
                  */
-                fprintf(stderr,"invalid syntax!\n");
+                fprintf(stderr, syntax_error_fmt, tokens[i]);
                 return NULL;
             }
-        } else if (argv[i][0]=='|'){
-            if (argv[i][1] == '|' && !argv[2]){
+        } else if (tokens[i][0]=='|') {
+            if (tokens[i][1] == '|' && !tokens[2]) {
                 n++;
             } else {
                 /* || is the only accepted elem starting with | */
-                fprintf(stderr, "invalid syntax|\n");
+                fprintf(stderr, syntax_error_fmt, tokens[i]);
                 return NULL;
             }
         }
     }
+
     /* now allocate our array of commands */
-    c = malloc(sizeof(struct command) * n);
-    if(!c){
+    c = malloc(sizeof(struct command) * (n + 1));
+    if (!c) {
         fprintf(stderr, "lack of memory");
         return NULL;
     }
-    /* now we want 
+
+    for (i = j = n = 0; tokens[i]; i++) {
+        if (tokens[i][0] == '&') {
+            if (tokens[i][1])
+                c[n].type = AND;
+            else
+                c[n].type = BACKGROUND;
+            c[n++].argv = tokens + j;
+            free(tokens[j = i]);
+            tokens[j++] = NULL;
+        } else if (tokens[i][0] == '|' && tokens[i][1]) {
+            c[n].type = OR;
+            c[n++].argv = tokens + j;
+            free(tokens[j = i]);
+            tokens[j++] = NULL;
+        }
+    }
+
+    if (c[n-1].type != BACKGROUND) {
+        c[n].type = NORMAL;
+        c[n++].argv = tokens + j;
+    }
+    
+    c[n].argv = NULL; /* to know where the array ends */
+
+    return c;
 }
 
 void shell (void) {
-    char **argv;
-    int j = 0;
+    char **tokens;
+    struct command *cmds;
+    int i = 0, j = 0;
 
     /* temporary testing */
     char *line = readLine();
-    argv = tokenize(line);
-    for (j = 0; argv[j]; j++)
-        printf("%s\n", argv[j]);
+    tokens = tokenize(line);
+    cmds = parse(tokens);
+    for (i = 0; cmds[i].argv; i++) {
+        printf("argv: \n  ");
+        for (j = 0; cmds[i].argv[j]; j++)
+            printf("%s ", cmds[i].argv[j]);
+        puts("");
+        switch (cmds[i].type) {
+        case NORMAL: puts("NORMAL"); break;
+        case BACKGROUND: puts("BACKGROUND"); break;
+        case AND: puts("AND"); break;
+        case OR: puts("OR"); break;
+        }
+    }
 
-    /* clean up */
-    for (j = 0; argv[j]; j++)
-        free(argv[j]);
-    free(argv);
-    free(line);
+    for (i = 0; cmds[i].argv; i++) {
+        for (j = 0; cmds[i].argv[j]; j++)
+            free(cmds[i].argv[j]);
+    }
+    free(cmds[0].argv);
+    free(cmds);
 }
 
 /*

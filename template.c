@@ -130,7 +130,7 @@ free_argv:
     return NULL;
 }
 
-const char* syntax_error_fmt = "bash: syntax error near unexcepted token `%s'\n";
+const char* syntax_error_fmt = "bash: syntax error near unexpected token `%s'\n";
 
 struct command *parse (char **tokens){
     int i, j, n = 1;
@@ -154,7 +154,7 @@ struct command *parse (char **tokens){
                 return NULL;
             }
         } else if (tokens[i][0]=='|') {
-            if (tokens[i][1] == '|' && !tokens[2]) {
+            if (tokens[i][1] == '|' && !tokens[i][2]) {
                 n++;
             } else {
                 /* || is the only accepted elem starting with | */
@@ -209,7 +209,8 @@ int execute_cmd (struct command cmd) {
     } else if (pid == 0) {
         child_code = execvp(cmd.argv[0], cmd.argv);
     } else if (cmd.type != BACKGROUND) {
-        child_code = wait(&child_code);
+        wait(&child_code);
+        child_code = WEXITSTATUS(child_code);
     }
 
     return child_code;
@@ -225,14 +226,30 @@ int execute (struct command *cmds) {
     for (i = 0; cmds[i].argv; i++) {
         ret = execute_cmd(cmds[i]);
 
-        if (ret < 0 && cmds[i].type != OR) {
+        if (ret < 0) {
+            /* cmds[i].type != OR */
+            /* here if error in execvp */
             fprintf(stderr, "bash: %s: command not found\n", cmds[i].argv[0]);
             free_commands(cmds);
-            return -1;
+            return 1;
         } else if (ret == 0) {
-
+            if (cmds[i].type == OR) {
+                while (cmds[i].argv && cmds[i].type != AND)
+                    i++;
+                if (!(cmds[i].argv && cmds[i].type == AND)) {
+                    free_commands(cmds);
+                    return 1;
+                }
+            }
         } else {
-            
+            if (cmds[i].type == AND) {
+                while (cmds[i].argv && cmds[i].type != OR)
+                    i++;
+                if (!(cmds[i].argv && cmds[i].type == OR)) {
+                    free_commands(cmds);
+                    return 1;
+                }
+            }
         }
     }
 
@@ -259,9 +276,7 @@ void shell (void) {
     tokens = tokenize(line);
     cmds = parse(tokens);
 
-    puts("after error?");
-    
-    execute(cmds);
+    exit(execute(cmds));
     /* temporary testing
     for (i = 0; cmds[i].argv; i++) {
         printf("argv: \n  ");

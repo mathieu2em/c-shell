@@ -208,11 +208,15 @@ int execute_cmd (struct command cmd) {
         return -1;
     } else if (pid == 0) {
         child_code = execvp(cmd.argv[0], cmd.argv);
+        /* execvp only returns on error */
+        fprintf(stderr, "bash: %s: command not found\n", cmd.argv[0]);
     } else if (cmd.type != BACKGROUND) {
-        wait(&child_code);
+        waitpid(pid, &child_code, 0);
+        /* printf("pid : %d, argv[0] : %s\n", pid, cmd.argv[0]); */
         child_code = WEXITSTATUS(child_code);
     }
 
+    /* child_code should only be negative if fork or execvp failed */
     return child_code;
 }
 
@@ -227,11 +231,10 @@ int execute (struct command *cmds) {
         ret = execute_cmd(cmds[i]);
 
         if (ret < 0) {
-            /* cmds[i].type != OR */
-            /* here if error in execvp */
-            fprintf(stderr, "bash: %s: command not found\n", cmds[i].argv[0]);
+            /* here if error in execvp or fork */
             free_commands(cmds);
-            return 1;
+            /* exit after, we are inside child process or fork failed */
+            return -1;
         } else if (ret == 0) {
             if (cmds[i].type == OR) {
                 while (cmds[i].argv && cmds[i].type != AND)
@@ -268,30 +271,33 @@ void free_commands (struct command *cmds) {
 }
 
 void shell (void) {
+    char *line;
     char **tokens;
     struct command *cmds;
     int i = 0, j = 0;
 
-    char *line = readLine();
-    tokens = tokenize(line);
-    cmds = parse(tokens);
-
-    exit(execute(cmds));
-    /* temporary testing
-    for (i = 0; cmds[i].argv; i++) {
-        printf("argv: \n  ");
-        for (j = 0; cmds[i].argv[j]; j++)
-            printf("%s ", cmds[i].argv[j]);
-        puts("");
-        switch (cmds[i].type) {
-        case NORMAL: puts("NORMAL"); break;
-        case BACKGROUND: puts("BACKGROUND"); break;
-        case AND: puts("AND"); break;
-        case OR: puts("OR"); break;
-        }
+    while (1) {
+        line = readLine();
+        tokens = tokenize(line);
+        cmds = parse(tokens);
+        if (execute(cmds) < 0)
+            exit(1);
     }
-    */
 }
+/* temporary testing
+   for (i = 0; cmds[i].argv; i++) {
+   printf("argv: \n  ");
+   for (j = 0; cmds[i].argv[j]; j++)
+   printf("%s ", cmds[i].argv[j]);
+   puts("");
+   switch (cmds[i].type) {
+   case NORMAL: puts("NORMAL"); break;
+   case BACKGROUND: puts("BACKGROUND"); break;
+   case AND: puts("AND"); break;
+   case OR: puts("OR"); break;
+   }
+   }
+*/
 
 /*
  * Dont change main!

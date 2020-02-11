@@ -13,18 +13,23 @@
 #define IS_SPECIAL(c) ((c) == '&' || (c) == '|')
 #define INSIDE_WORD(c) (!(IS_SPECIAL(c) || IS_SPACE(c)))
 
-enum { NORMAL, BACKGROUND, AND, OR };
+enum { NORMAL, AND, OR };
 
 struct command {
     char **argv;
     char type;
 };
 
+struct cmdline {
+    struct command *commands;
+    bool is_background;
+};
+
 char *readLine (void);
 int count_tokens (char *);
 char **tokenize (char *);
-struct command *parse (char **);
-int execute (struct command *);
+struct cmdline parse (char **);
+int execute (struct cmdline);
 void free_commands (struct command *);
 
 /* readline allocate a new char array */
@@ -132,16 +137,19 @@ free_argv:
 
 const char* syntax_error_fmt = "bash: syntax error near unexpected token `%s'\n";
 
-struct command *parse (char **tokens){
+struct cmdline parse (char **tokens){
     int i, j, n = 1;
-    struct command *c;
+    struct cmdline cmd_line;
+    cmd_line.is_background = false;
+
     /* count commands */
     for (i = 0; tokens[i]; i++) {
         if (tokens[i][0] == '&') {
             if (!tokens[i][1]) {
                 if (tokens[i+1]) {
                     fprintf(stderr, syntax_error_fmt, tokens[i+1]);
-                    return NULL;
+                    cmd_line.commands = NULL;
+                    return cmd_line;
                 }
             } else if (tokens[i][1] == '&' && !tokens[i][2]) {
                 n++;
@@ -151,7 +159,8 @@ struct command *parse (char **tokens){
                  *  if we aren't at the end
                  */
                 fprintf(stderr, syntax_error_fmt, tokens[i]);
-                return NULL;
+                cmd_line.commands = NULL;
+                return cmd_line;
             }
         } else if (tokens[i][0]=='|') {
             if (tokens[i][1] == '|' && !tokens[i][2]) {
@@ -159,49 +168,51 @@ struct command *parse (char **tokens){
             } else {
                 /* || is the only accepted elem starting with | */
                 fprintf(stderr, syntax_error_fmt, tokens[i]);
-                return NULL;
+                cmd_line.commands = NULL;
+                return cmd_line;
             }
         }
     }
 
     /* now allocate our array of commands */
-    c = malloc(sizeof(struct command) * (n + 1));
-    if (!c) {
+    cmd_line.commands = malloc(sizeof(struct command) * (n + 1));
+    if (!cmd_line.commands) {
         fprintf(stderr, "lack of memory");
-        return NULL;
+        cmd_line.commands = NULL;
+        return cmd_line;
     }
 
     for (i = j = n = 0; tokens[i]; i++) {
         if (tokens[i][0] == '&') {
             if (tokens[i][1])
-                c[n].type = AND;
+                cmd_line.commands[n].type = AND;
             else
-                c[n].type = BACKGROUND;
-            c[n++].argv = tokens + j;
+                cmd_line.is_background = true;
+            cmd_line.commands[n++].argv = tokens + j;
             free(tokens[j = i]);
             tokens[j++] = NULL;
         } else if (tokens[i][0] == '|' && tokens[i][1]) {
-            c[n].type = OR;
-            c[n++].argv = tokens + j;
+            cmd_line.commands[n].type = OR;
+            cmd_line.commands[n++].argv = tokens + j;
             free(tokens[j = i]);
             tokens[j++] = NULL;
         }
     }
 
-    if (c[n-1].type != BACKGROUND) {
-        c[n].type = NORMAL;
-        c[n++].argv = tokens + j;
+    if (!cmd_line.is_background) {
+        cmd_line.commands[n].type = NORMAL;
+        cmd_line.commands[n++].argv = tokens + j;
     }
-    
-    c[n].argv = NULL; /* to know where the array ends */
 
-    return c;
+    cmd_line.commands[n].argv = NULL; /* to know where the array ends */
+
+    return cmd_line;
 }
 
 int execute_cmd (struct command cmd) {
     int child_code = 0;
     pid_t pid;
-    
+
     pid = fork();
     if (pid < 0) {
         fprintf(stderr, "could not fork process\n");
@@ -210,7 +221,7 @@ int execute_cmd (struct command cmd) {
         child_code = execvp(cmd.argv[0], cmd.argv);
         /* execvp only returns on error */
         fprintf(stderr, "bash: %s: command not found\n", cmd.argv[0]);
-    } else if (cmd.type != BACKGROUND) {
+    } else {
         waitpid(pid, &child_code, 0);
         /* printf("pid : %d, argv[0] : %s\n", pid, cmd.argv[0]); */
         child_code = WEXITSTATUS(child_code);
@@ -224,9 +235,25 @@ int execute_cmd (struct command cmd) {
   il faut quon fork le process
   pi dans le child process quon fasse le exec
   pi dans lautre process faut quon check squi spasse */
-int execute (struct command *cmds) {
+int execute (struct cmdline cmd_line) {
     int i, ret;
-    
+    pid_t pid;
+    struct command *cmds = cmd_line.commands;
+
+    if(cmd_line.is_background){
+        pid = fork();
+        if (pid < 0) {
+            /* si le fork a fail */
+            fprintf(stderr, "could not fork process\n");
+            free_commands(cmds);
+            return -1;
+        } else if (pid != 0) {
+            /* t'es dans le parent */
+            free_commands(cmds);
+            return 0;
+        }
+    }
+
     for (i = 0; cmds[i].argv; i++) {
         ret = execute_cmd(cmds[i]);
 
@@ -273,14 +300,14 @@ void free_commands (struct command *cmds) {
 void shell (void) {
     char *line;
     char **tokens;
-    struct command *cmds;
-    int i = 0, j = 0;
+    struct cmdline cmd_ln;
+    //int i = 0, j = 0;
 
     while (1) {
         line = readLine();
         tokens = tokenize(line);
-        cmds = parse(tokens);
-        if (execute(cmds) < 0)
+        cmd_ln = parse(tokens);
+        if (execute(cmd_ln) < 0)
             exit(1);
     }
 }

@@ -303,6 +303,7 @@ void shell (void) {
     struct cmdline cmd_ln;
     //int i = 0, j = 0;
 
+    //TODO add fN and lN functions as demanded
     while (1) {
         line = readLine();
         tokens = tokenize(line);

@@ -223,6 +223,18 @@ struct cmdline parse (char **tokens){
             free(tokens[j = i]);
             tokens[j++] = NULL;
         }
+        // TODO if rN or fN , do something , add new rn fn boolean to struct and
+        // also a integer and put the right execute logic for each cases
+        if (tokens[i][0]=='r') {
+            j=1;
+            while(tokens[i][j]){
+                if(!isdigit(tokens[i][j++])){
+                    fprintf(stderr, syntax_error_fmt, tokens[i]);
+                    cmd_line.commands = NULL;
+                    return cmd_line;
+                }
+            }
+        }
     }
 
     if (!cmd_line.is_background) {

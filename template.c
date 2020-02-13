@@ -3,6 +3,7 @@
 #include <string.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <ctype.h>
 
 #define true 1
 #define false 0
@@ -32,6 +33,11 @@ struct cmdline parse (char **);
 int execute (struct cmdline);
 void free_commands (struct command *);
 
+int syntax_error(){
+    fprintf(stderr, "syntax error!\n");
+    return -1;
+}
+
 /* readline allocate a new char array */
 char* readLine (void) {
     char *line;
@@ -59,81 +65,101 @@ char* readLine (void) {
     return line;
 }
 
-int count_tokens (char *str) {
-    int n = 0;
-    int i = 0;
+/* extract all arguments */
+char **tokenize(char *str){
+    char *string[256];
+    char **retstr;
+    char *token;
+    char *s = " &|\t\n()";
+    int i = 0, j = 0;
 
-    for (; str[i]; i++) {
-        if ((IS_SPECIAL(str[i]) && IS_SPACE(str[i+1])) ||
-            (IS_SPECIAL(str[i]) && INSIDE_WORD(str[i+1])) ||
-            (INSIDE_WORD(str[i]) && IS_SPECIAL(str[i+1])) ||
-            (INSIDE_WORD(str[i]) && IS_SPACE(str[i+1])) ||
-            (!IS_SPACE(str[i]) && !str[i+1]))
-            n++;
+    /* get the first token */
+    token = strtok(str, s);
+
+    /* walk through other tokens */
+    while( token != NULL ) {
+        printf( " %s\n", token );
+        string[i++]=token;
+        token = strtok(NULL, s);
     }
-    return n;
+    string[i]=NULL;
+
+    retstr = malloc(sizeof(char *)*i);
+    i=0;
+    while(string[i]!=NULL){
+        for(j=0; string[i][j]; j++);
+        retstr[i] = malloc(sizeof(string[i])*j);
+        strncpy(retstr[i], string[i], j);
+        i++;
+    }
+    retstr[i]=NULL;
+    return retstr;
 }
 
-/*
- * build_argv builds the arguments array to be passed to execvp
- */
-char **tokenize (char *str) {
-    char **argv;
-    int i = 0, j = 0, n = 1;
+char *spacer(char *str){
+    char string[1000];
+    char *result;
+    int i = 0;
+    int j = 0;
 
-    /* skip spaces in front */
-    while(str[i] && IS_SPACE(str[i]))
-        i++;
-
-    n = count_tokens(str+i); /* le + i optimise */
-
-    argv = malloc(sizeof(char *) * (n + 1));
-
-    if (!argv) {
-        fprintf(stderr, "argument array (argv) could not be allocated\n");
-        /* no need to free argv */
-        free(str);
-        return NULL;
-    }
-
-    n = 0;
-    j = i;
-
-    for (; str[i]; i++) {
-        if((IS_SPACE(str[i]) && INSIDE_WORD(str[i+1])) ||
-           (IS_SPACE(str[i]) && IS_SPECIAL(str[i+1])))
-            j = i+1;
-        if((IS_SPECIAL(str[i]) && IS_SPACE(str[i+1])) ||
-           (IS_SPECIAL(str[i]) && INSIDE_WORD(str[i+1])) ||
-           (INSIDE_WORD(str[i]) && IS_SPECIAL(str[i+1])) ||
-           (INSIDE_WORD(str[i]) && IS_SPACE(str[i+1])) ||
-           (!IS_SPACE(str[i]) && !str[i+1])) {
-            argv[n] = malloc(sizeof(char) * (i+1 - j + 1));
-
-            if (!argv[n]) {
-                fprintf(stderr, "argv[%d] could not be allocated\n", n--);
-                goto free_argv;
+    while(str[i]){
+        if(IS_SPECIAL(str[i])){
+            if(str[i+1] && IS_SPECIAL(str[i+1])){
+                string[j++]=' ';
+                string[j++]=str[i++];
+                string[j++]=str[i];
+                string[j++]=' ';
+            } else if (!str[i+1]) {
+                string[j++]=' ';
+                string[j++]=str[i];
+                string[j++]=' ';
             }
-            strncpy(argv[n], str + j, i+1 - j);
-            argv[n++][i+1 - j] = '\0';
-            j=i+1;
+            if(str[i+2] && IS_SPECIAL(str[i+2])){
+                return syntax_error(); // TODO not sure how to fix this
+            }
+        } else {
+            string[j++]=str[i];
+        }
+        i++;
+    }
+    string[j]='\0';
+    for(i=0; string[i]; i++);
+    result = malloc(sizeof(char)*(i+1));
+    strncpy(result, string, i);
+    printf("%s\n", result);
+    return result;
+}
 
+int verify_rnfn(char *str, char verifier){
+    char *ret;
+    int i;
+    /* verify for rN */
+    while((ret = strchr(str, verifier))){
+        i = ret-str+1;
+        if(isdigit(str[++i])){
+            while(isdigit(str[i++]));
+            if(str[i]!='('){
+                fprintf(stderr, "syntax error");
+                return false;
+            } else {
+                while(str[i] && str[i++]!=')');
+                if(str[i] && str[i] != ')'){
+                    fprintf(stderr, "syntax error");
+                    return false;
+                }
+            }
         }
     }
-
-    argv[n] = NULL;
-
-    free(str);
-
-    return argv;
-
-free_argv:
-    for (; n >= 0; n--)
-        free(argv[n]);
-    free(argv);
-    free(str);
-    return NULL;
+    return true;
 }
+
+/* verify syntax */
+int syntax_verifier(char *str){
+    /* verify for rN */
+    if(!verify_rnfn(str, 'r') || !verify_rnfn(str, 'f')) return false;
+    return true;
+}
+
 
 const char* syntax_error_fmt = "bash: syntax error near unexpected token `%s'\n";
 
@@ -306,6 +332,10 @@ void shell (void) {
     //TODO add fN and lN functions as demanded
     while (1) {
         line = readLine();
+        if (!syntax_verifier(line)){
+            fprintf(stderr, "syntax error\n");
+        }
+        line = spacer(line);
         tokens = tokenize(line);
         cmd_ln = parse(tokens);
         if (execute(cmd_ln) < 0)

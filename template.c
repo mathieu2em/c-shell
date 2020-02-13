@@ -19,6 +19,7 @@ enum { NORMAL, AND, OR };
 struct command {
     char **argv;
     char type;
+    char rnfn;
 };
 
 struct cmdline {
@@ -70,7 +71,7 @@ char **tokenize(char *str){
     char *string[256];
     char **retstr;
     char *token;
-    char *s = " &|\t\n()";
+    char *s = " \t\n()";
     int i = 0, j = 0;
 
     /* get the first token */
@@ -84,12 +85,13 @@ char **tokenize(char *str){
     }
     string[i]=NULL;
 
-    retstr = malloc(sizeof(char *)*i);
+    /* malloc the string for the return string value */
+    retstr = malloc(sizeof(char *)*(i+1));
     i=0;
     while(string[i]!=NULL){
         for(j=0; string[i][j]; j++);
-        retstr[i] = malloc(sizeof(string[i])*j);
-        strncpy(retstr[i], string[i], j);
+        retstr[i] = malloc(sizeof(char)*(j+1));
+        strcpy(retstr[i], string[i]);
         i++;
     }
     retstr[i]=NULL;
@@ -225,7 +227,7 @@ struct cmdline parse (char **tokens){
         }
         // TODO if rN or fN , do something , add new rn fn boolean to struct and
         // also a integer and put the right execute logic for each cases
-        if (tokens[i][0]=='r') {
+        else if (tokens[i][0]=='r') {
             j=1;
             while(tokens[i][j]){
                 if(!isdigit(tokens[i][j++])){
@@ -330,7 +332,7 @@ void free_commands (struct command *cmds) {
     for (i = 0; cmds[i].argv; i++) {
         for (j = 0; cmds[i].argv[j]; j++)
             free(cmds[i].argv[j]);
-    }
+}
     free(cmds[0].argv);
     free(cmds);
 }
@@ -349,6 +351,10 @@ void shell (void) {
         }
         line = spacer(line);
         tokens = tokenize(line);
+        // test
+        int i=0;
+        while(tokens[i]) printf("%s\n", tokens[i++]);
+        //----------
         cmd_ln = parse(tokens);
         if (execute(cmd_ln) < 0)
             exit(1);

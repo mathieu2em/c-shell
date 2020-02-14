@@ -33,8 +33,10 @@ struct cmdline parse (char **);
 int execute (struct cmdline);
 void free_commands (struct command *);
 
-int syntax_error(){
-    fprintf(stderr, "syntax error!\n");
+const char* syntax_error_fmt = "bash: syntax error near unexpected token `%s'\n";
+
+int syntax_error(char *str){
+    fprintf(stderr, syntax_error_fmt, str);
     return -1;
 }
 
@@ -44,7 +46,6 @@ char* readLine (void) {
     int c, n = 0, len = MIN_STR;
 
     line = malloc(sizeof(char) * len); /* initialize array */
-
     if (!line) {
         fprintf(stderr, "could not initialize line\n");
         return NULL;
@@ -127,7 +128,8 @@ char *spacer(char *str){
                     string[j++] = str[i];
                     string[j++] = ' ';
                 } else {
-                    syntax_error();
+                    char str2[2] = {str[i],str[i+1]};
+                    syntax_error(str2);
                     free(str);
                     return NULL;
                 }
@@ -137,7 +139,8 @@ char *spacer(char *str){
                 string[j++]=' ';
             }
             if(str[i+2] && IS_SPECIAL(str[i+2])){
-                syntax_error();
+                char str6[6] = {str[i],str[i+1],str[i+2],'.','.','.'};
+                syntax_error(str6);
                 free(str);
                 return NULL;
             }
@@ -147,17 +150,24 @@ char *spacer(char *str){
         i++;
     }
     string[j]='\0';
+
     result = malloc(sizeof(char)*(j+1));
+    if(!result){
+        fprintf(stderr, "lack of memory\n");
+        free(str);
+        return NULL;
+    }
+
     strcpy(result, string);
-    printf("%s\n", result);
     free(str);
     return result;
 }
 
+/* verify if rn and fn respect their given synthax */
 int verify_rnfn(char *str, char verifier){
     char *ret;
     int i = 0;
-    /* verify for rN */
+
     while((ret = strchr(str+i, verifier))){
         i = (int)(ret-str+1);
         if(isdigit(str[i++])){
@@ -182,12 +192,9 @@ int syntax_verifier(char *str){
     return true;
 }
 
-
-const char* syntax_error_fmt = "bash: syntax error near unexpected token `%s'\n";
-
 /* creates the cmdline structure that containes every commands with their types and other particularities */
 struct cmdline parse (char **tokens){
-    int i, j, n = 1;
+    int i, j, k, n = 1;
     struct cmdline cmd_line;
     cmd_line.is_background = false;
 
@@ -231,6 +238,11 @@ struct cmdline parse (char **tokens){
         return cmd_line;
     }
 
+    for (i=0; i<n; i++){
+        cmd_line.commands[i].rnfn = '0';
+        cmd_line.commands[i].n = 0;
+    }
+
     /* now create the right structures for commands */
     for (i = j = n = 0; tokens[i]; i++) {
         /* if the argument is a and get arguments before the and and set type to AND */
@@ -243,28 +255,24 @@ struct cmdline parse (char **tokens){
             free(tokens[j = i]);
             tokens[j++] = NULL;
         }
-        /* same for or */
+            /* same for or */
         else if (tokens[i][0] == '|' && tokens[i][1]) {
             cmd_line.commands[n].type = OR;
             cmd_line.commands[n++].argv = tokens + j;
             free(tokens[j = i]);
             tokens[j++] = NULL;
         }
-        // also a integer and put the right execute logic for each cases
+            // also a integer and put the right execute logic for each cases
         else if (tokens[i][0]=='r' || tokens[i][0]=='f') {
-            j=1;
-            while(tokens[i][j]){
-                if(!isdigit(tokens[i][j++])){
-                    fprintf(stderr, syntax_error_fmt, tokens[i]);
-                    cmd_line.commands = NULL;
-                    return cmd_line;
-                }
-            }
-            cmd_line.commands[n].rnfn = (tokens[i][0]=='f')?'f':'r';
-            cmd_line.commands[n].n = atoi(tokens[i]+1);
+            k=1;
+            while(tokens[i][k] && isdigit(tokens[i][k++]));
+            if(!tokens[i][k] && isdigit(tokens[i][k-1])) {
+                cmd_line.commands[n].rnfn = (tokens[i][0] == 'f') ? 'f' : 'r';
+                cmd_line.commands[n].n = atoi(tokens[i] + 1);
 
-            free(tokens[j = i]);
-            tokens[j++] = NULL;
+                free(tokens[j = i]);
+                tokens[j++] = NULL;
+            }
         }
     }
 
@@ -274,7 +282,6 @@ struct cmdline parse (char **tokens){
     }
 
     cmd_line.commands[n].argv = NULL; /* to know where the array ends */
-
     return cmd_line;
 }
 
@@ -312,11 +319,11 @@ int execute (struct cmdline cmd_line) {
         if (pid < 0) {
             /* si le fork a fail */
             fprintf(stderr, "could not fork process\n");
-            free_commands(cmds);
+            //free_commands(cmds);
             return -1;
         } else if (pid != 0) {
             /* t'es dans le parent */
-            free_commands(cmds);
+            //free_commands(cmds);
             return 0;
         }
     }
@@ -327,7 +334,7 @@ int execute (struct cmdline cmd_line) {
                 ret = (cmds[i].rnfn=='f')?0:execute_cmd(cmds[i]);
                 if (ret < 0) {
                     /* here if error in execvp or fork */
-                    free_commands(cmds);
+                    //free_commands(cmds);
                     /* exit after, we are inside child process or fork failed */
                     return -1;
                 } else if (ret == 0) {
@@ -335,7 +342,7 @@ int execute (struct cmdline cmd_line) {
                         while (cmds[i].argv && cmds[i].type != AND)
                             i++;
                         if (!(cmds[i].argv && cmds[i].type == AND)) {
-                            free_commands(cmds);
+                            //free_commands(cmds);
                             return 1;
                         }
                     }
@@ -344,7 +351,7 @@ int execute (struct cmdline cmd_line) {
                         while (cmds[i].argv && cmds[i].type != OR)
                             i++;
                         if (!(cmds[i].argv && cmds[i].type == OR)) {
-                            free_commands(cmds);
+                            //free_commands(cmds);
                             return 1;
                         }
                     }
@@ -354,7 +361,7 @@ int execute (struct cmdline cmd_line) {
             ret = execute_cmd(cmds[i]);
             if (ret < 0) {
                 /* here if error in execvp or fork */
-                free_commands(cmds);
+                //free_commands(cmds);
                 /* exit after, we are inside child process or fork failed */
                 return -1;
             } else if (ret == 0) {
@@ -362,7 +369,7 @@ int execute (struct cmdline cmd_line) {
                     while (cmds[i].argv && cmds[i].type != AND)
                         i++;
                     if (!(cmds[i].argv && cmds[i].type == AND)) {
-                        free_commands(cmds);
+                        //free_commands(cmds);
                         return 1;
                     }
                 }
@@ -371,14 +378,14 @@ int execute (struct cmdline cmd_line) {
                     while (cmds[i].argv && cmds[i].type != OR)
                         i++;
                     if (!(cmds[i].argv && cmds[i].type == OR)) {
-                        free_commands(cmds);
+                        //free_commands(cmds);
                         return 1;
                     }
                 }
             }
         }
     }
-    free_commands(cmds);
+    //free_commands(cmds);
     return 0;
 }
 
@@ -401,21 +408,24 @@ void shell (void) {
     while (1) {
         line = readLine();
         if (!syntax_verifier(line)){
-            fprintf(stderr, "syntax error\n");
+            free(line);
+            fprintf(stderr, syntax_error_fmt, "'rN' or 'fN'");
         }
         line = spacer(line); /* puts spaces for special cases */
-        if(line) {
+        if(line!=NULL) {
             tokens = tokenize(line);
-
             cmd_ln = parse(tokens);
             if (execute(cmd_ln) < 0) {
-                free(line);
-                for(int i = 0; tokens[i]; i++){
-                    free(tokens[i]);
-                }
+                free_commands(cmd_ln.commands);
                 free(tokens);
+                free(line);
                 exit(1);
+            } else {
+                free_commands(cmd_ln.commands);
+                free(tokens);
             }
+            free(line);
+            line=NULL;
         } else {
             free(line);
         }

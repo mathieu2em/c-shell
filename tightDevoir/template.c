@@ -222,7 +222,7 @@ struct cmdline parse (char **tokens) {
             while(tokens[i][k] && isdigit(tokens[i][k]))
                 k++;
             if(isdigit(tokens[i][k-1]) && tokens[i][k] == '(') {
-                cmd_line.commands[n].rnfn = (tokens[i][0] == 'f') ? 'f' : 'r';
+                cmd_line.commands[n].rnfn = tokens[i][0];
                 tokens[i][k] = '\0';
                 cmd_line.commands[n].n = atoi(tokens[i] + 1);
                 if (!tokens[i][k+1]) {
@@ -308,6 +308,8 @@ int execute (struct cmdline cmd_line) {
                 /* skip until && */
                 while (cmds[i].argv && cmds[i].type != AND)
                     i++;
+                if (!cmds[i].argv)
+                    break;
             }
         } else { /* here if failure */
             /* AND should eval until one failure */
@@ -315,6 +317,8 @@ int execute (struct cmdline cmd_line) {
                 /* skip until || */
                 while (cmds[i].argv && cmds[i].type != OR)
                     i++;
+                if (!cmds[i].argv)
+                    break;
             }
         }
     }
@@ -332,14 +336,21 @@ void shell (void) {
         if (line) {
             tokens = tokenize(line);
             cmd_ln = parse(tokens);
-            ret = execute(cmd_ln);
+            if (!cmd_ln.commands) {
+                /* means lack of memory */
+                free(tokens);
+                free(line);
+                exit(1);
+            } else {
+                ret = execute(cmd_ln);
 
-            free(cmd_ln.commands);
-            free(tokens);
-            free(line);
-
-            if (ret < 0)
-                exit(0);
+                free(cmd_ln.commands);
+                free(tokens);
+                free(line);
+                
+                if (ret < 0)
+                    exit(1);
+            }
         }
         line = NULL;
     }

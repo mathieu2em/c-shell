@@ -30,22 +30,14 @@ struct cmdline {
     bool is_background;
 };
 
-int syntax_error (char *);
 int insert_char (char *, int, char, int);
 char *readLine (void);
-int verify_rnfn (char *, char);
-int syntax_verifier (char *);
 char **tokenize (char *);
 struct cmdline parse (char **);
 int execute_cmd (struct command);
 int execute (struct cmdline);
 
 const char* syntax_error_fmt = "bash: syntax error near unexpected token `%s'\n";
-
-int syntax_error(char *str) {
-    fprintf(stderr, syntax_error_fmt, str);
-    return -1;
-}
 
 int insert_char (char *str, int pos, char c, int len)
 {
@@ -145,36 +137,6 @@ char **tokenize(char *str){
     tokens[i] = NULL;
 
     return tokens;
-}
-
-/* verify if rn and fn respect their given synthax */
-int verify_rnfn(char *str, char verifier){
-    char *ret;
-    int i = 0;
-
-    while (ret = strchr(str+i, verifier)) {
-        i = (int)(ret-str+1);
-        if(isdigit(str[i++])){
-            while(isdigit(str[i])) i++;
-            if(str[i]!='('){
-                return false;
-            } else {
-                while(str[i] && str[i]!=')') i++;
-                if(str[i] && str[i] != ')'){
-                    return false;
-                }
-            }
-        }
-    }
-    return true;
-}
-
-/* verify very lightly the syntax for rN and fN */
-int syntax_verifier(char *str){
-    /* verify for rN */
-    if (!verify_rnfn(str, 'r') || !verify_rnfn(str, 'f'))
-        return false;
-    return true;
 }
 
 /* creates the cmdline structure that containes every commands with their

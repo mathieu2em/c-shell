@@ -10,7 +10,7 @@
 #define false 0
 #define bool int
 
-#define MIN_STR 128
+#define MIN_SIZE 128
 #define IS_SPECIAL(c) ((c) == '&' || (c) == '|')
 
 enum { NORMAL, AND, OR };
@@ -27,76 +27,140 @@ struct cmdline {
     bool is_background;
 };
 
+int syntax_error (char *);
+int insert_char (char *, int, char, int);
 char *readLine (void);
+int verify_rnfn (char *, char);
+int syntax_verifier (char *);
 char **tokenize (char *);
 struct cmdline parse (char **);
+int execute_cmd (struct command);
 int execute (struct cmdline);
-void free_commands (struct command *);
 
 const char* syntax_error_fmt = "bash: syntax error near unexpected token `%s'\n";
 
-int syntax_error(char *str){
+int syntax_error(char *str) {
     fprintf(stderr, syntax_error_fmt, str);
     return -1;
+}
+
+int insert_char (char *str, int pos, char c, int len)
+{
+    char *saved;
+    if (pos == len - 1) {
+        len *= 2;
+        str = (char*) realloc(saved = str, sizeof(char) * len);
+        if (!str) {
+            fprintf(stderr, "string could not be extended\n");
+            free(saved);
+            return -1;
+        }
+    }
+    str[pos] = c;
+    return len;
 }
 
 /* readline allocate a new char array */
 char* readLine (void) {
     char *line;
-    int c, n = 0, len = MIN_STR;
+    int c, p, n = 0, len = MIN_SIZE;
 
-    line = malloc(sizeof(char) * len); /* initialize array */
+    line = (char*) malloc(sizeof(char) * len); /* initialize array */
     if (!line) {
-        fprintf(stderr, "could not initialize line\n");
+        fprintf(stderr, "could not initialize string\n");
         return NULL;
     }
 
     while ((c = getchar()) != EOF && c != '\n') {
-        if (n == len - 1) {
-            len *= 2;
-            /* extend array size, shouldn't change content
-               according to `man 3 realloc` */
-            line = (char*) realloc(line, sizeof(char) * len);
+        if (IS_SPECIAL(c)) {
+            len = insert_char(line, n++, ' ', len);
+            if (len < 0)
+                return NULL;
+            
+            len = insert_char(line, n++, (char) (p = c), len);
+            if (len < 0)
+                return NULL;
+            
+            while ((c = getchar()) == p) {
+                len = insert_char(line, n++, (char) c, len);
+                if (len < 0)
+                    return NULL;
+            }
+            
+            if (c == EOF || c == '\n')
+                break;
+
+            len = insert_char(line, n++, ' ', len);
         }
-        line[n++] = (char)c;
+        len = insert_char(line, n++, (char) c, len);
+        if (len < 0)
+            return NULL;
     }
 
+    if (n == 0) {
+        free(line);
+        exit(0);
+    }
+    
     line[n] = '\0'; /* null terminate string */
 
     return line;
 }
 
-/* extract all arguments */
+/* tokenize arguments */
 char **tokenize(char *str){
-    char *string[256];
-    char **retstr;
-    char *token;
-    char *s = " \t\n()";
-    int i = 0, j = 0;
+    const char *delim = " \t\n()";
+    char **tokens, **saved, *next_tok;
+    int i = 0, len = MIN_SIZE;
 
     /* get the first token */
-    token = strtok(str, s);
+    next_tok = strtok(str, delim);
 
-    /* walk through other tokens */
-    while( token != NULL ) {
-        string[i++]=token;
-        token = strtok(NULL, s);
+    tokens = (char**) malloc(sizeof(char*) * len);
+    if (!tokens) {
+        fprintf(stderr, "could not initialize tokens array\n");
+        return NULL;
     }
-    string[i]=NULL;
+    
+    /* walk through other tokens */
+    while (next_tok) {
+        if (i == len - 1) {
+            len *= 2;
+            tokens = (char**) realloc(saved = tokens, sizeof(char*) * len);
+            if (!tokens) {
+                fprintf(stderr, "could not resize tokens array\n");
+                free(saved);
+                return NULL;
+            }
+        }
+        tokens[i++] = next_tok;
+        /* subsequent calls to strtok with the same string must pass NULL */
+        next_tok = strtok(NULL, delim);
+    }
+    
+    tokens[i] = NULL;
 
-    /* malloc the string for the return string value */
-    retstr = malloc(sizeof(char *)*(i+1));
-    /* if memory error */
+    return tokens;
+}
+
+/*
+char **old_tokenize (void) {
+    char *string[256];
+    char **retstr;
+
+    // malloc the string for the return string value
+    retstr = malloc(sizeof(char *) * (i + 1));
+    // if memory error
     if(retstr==NULL){
         fprintf(stderr, "error lack of memory\n");
         return NULL;
     }
     i = 0;
-    /* copy the string to return string */
+    // copy the string to return string
     while(string[i]!=NULL){
         for(j=0; string[i][j]; j++);
         retstr[i] = malloc(sizeof(char)*(j+1));
-        /* if memory error */
+        // if memory error
         if(retstr[i]==NULL){
             for(j=0; j<i; j++){
                 free(retstr[j]);
@@ -111,8 +175,10 @@ char **tokenize(char *str){
     retstr[i]=NULL;
     return retstr;
 }
+*/
 
 /* this method adds spaces so that echo a&&echo b is accepted as echo a && echo b */
+/*
 char *spacer(char *str){
     char string[256];
     char *result;
@@ -162,6 +228,7 @@ char *spacer(char *str){
     free(str);
     return result;
 }
+*/
 
 /* verify if rn and fn respect their given synthax */
 int verify_rnfn(char *str, char verifier){
@@ -188,12 +255,14 @@ int verify_rnfn(char *str, char verifier){
 /* verify very lightly the syntax for rN and fN */
 int syntax_verifier(char *str){
     /* verify for rN */
-    if(!verify_rnfn(str, 'r') || !verify_rnfn(str, 'f')) return false;
+    if (!verify_rnfn(str, 'r') || !verify_rnfn(str, 'f'))
+        return false;
     return true;
 }
 
-/* creates the cmdline structure that containes every commands with their types and other particularities */
-struct cmdline parse (char **tokens){
+/* creates the cmdline structure that containes every commands with their
+   types and other particularities */
+struct cmdline parse (char **tokens) {
     int i, j, k, n = 1;
     struct cmdline cmd_line;
     cmd_line.is_background = false;
@@ -218,7 +287,7 @@ struct cmdline parse (char **tokens){
                 cmd_line.commands = NULL;
                 return cmd_line;
             }
-        } else if (tokens[i][0]=='|') {
+        } else if (tokens[i][0] == '|') {
             if (tokens[i][1] == '|' && !tokens[i][2]) {
                 n++;
             } else {
@@ -238,7 +307,7 @@ struct cmdline parse (char **tokens){
         return cmd_line;
     }
 
-    for (i=0; i<n; i++){
+    for (i=0; i<n; i++) {
         cmd_line.commands[i].rnfn = '0';
         cmd_line.commands[i].n = 0;
     }
@@ -252,25 +321,27 @@ struct cmdline parse (char **tokens){
             else
                 cmd_line.is_background = true;
             cmd_line.commands[n++].argv = tokens + j;
-            free(tokens[j = i]);
+            tokens[i][0] = '\0';
+            j = i;
             tokens[j++] = NULL;
-        }
-            /* same for or */
-        else if (tokens[i][0] == '|' && tokens[i][1]) {
+        } else if (tokens[i][0] == '|' && tokens[i][1]) {
+        /* same for or */
             cmd_line.commands[n].type = OR;
             cmd_line.commands[n++].argv = tokens + j;
-            free(tokens[j = i]);
+            tokens[i][0] = '\0';
+            j = i;
             tokens[j++] = NULL;
         }
-            // also a integer and put the right execute logic for each cases
+        
+        // also a integer and put the right execute logic for each cases
         else if (tokens[i][0]=='r' || tokens[i][0]=='f') {
             k=1;
             while(tokens[i][k] && isdigit(tokens[i][k++]));
             if(!tokens[i][k] && isdigit(tokens[i][k-1])) {
                 cmd_line.commands[n].rnfn = (tokens[i][0] == 'f') ? 'f' : 'r';
                 cmd_line.commands[n].n = atoi(tokens[i] + 1);
-
-                free(tokens[j = i]);
+                tokens[i][0] = '\0';
+                j = i;
                 tokens[j++] = NULL;
             }
         }
@@ -314,24 +385,21 @@ int execute (struct cmdline cmd_line) {
     pid_t pid;
     struct command *cmds = cmd_line.commands;
 
-    if(cmd_line.is_background){
+    if (cmd_line.is_background) {
         pid = fork();
         if (pid < 0) {
             /* si le fork a fail */
             fprintf(stderr, "could not fork process\n");
-            //free_commands(cmds);
             return -1;
         } else if (pid != 0) {
-            /* t'es dans le parent */
-            //free_commands(cmds);
             return 0;
         }
     }
 
     for (i = 0; cmds[i].argv != NULL; i++) {
-        if(cmds[i].rnfn == 'r' || cmds[i].rnfn == 'f'){
-            for(int a = 0; a < cmds[i].n; a++){
-                ret = (cmds[i].rnfn=='f')?0:execute_cmd(cmds[i]);
+        if (cmds[i].rnfn == 'r' || cmds[i].rnfn == 'f') {
+            for (int a = 0; a < cmds[i].n; a++) {
+                ret = (cmds[i].rnfn == 'f') ? 0 : execute_cmd(cmds[i]);
                 if (ret < 0) {
                     /* here if error in execvp or fork */
                     //free_commands(cmds);
@@ -341,19 +409,15 @@ int execute (struct cmdline cmd_line) {
                     if (cmds[i].type == OR) {
                         while (cmds[i].argv && cmds[i].type != AND)
                             i++;
-                        if (!(cmds[i].argv && cmds[i].type == AND)) {
-                            //free_commands(cmds);
+                        if (!(cmds[i].argv && cmds[i].type == AND))
                             return 1;
-                        }
                     }
                 } else {
                     if (cmds[i].type == AND) {
                         while (cmds[i].argv && cmds[i].type != OR)
                             i++;
-                        if (!(cmds[i].argv && cmds[i].type == OR)) {
-                            //free_commands(cmds);
+                        if (!(cmds[i].argv && cmds[i].type == OR))
                             return 1;
-                        }
                     }
                 }
             }
@@ -361,7 +425,6 @@ int execute (struct cmdline cmd_line) {
             ret = execute_cmd(cmds[i]);
             if (ret < 0) {
                 /* here if error in execvp or fork */
-                //free_commands(cmds);
                 /* exit after, we are inside child process or fork failed */
                 return -1;
             } else if (ret == 0) {
@@ -377,27 +440,13 @@ int execute (struct cmdline cmd_line) {
                 if (cmds[i].type == AND) {
                     while (cmds[i].argv && cmds[i].type != OR)
                         i++;
-                    if (!(cmds[i].argv && cmds[i].type == OR)) {
-                        //free_commands(cmds);
+                    if (!(cmds[i].argv && cmds[i].type == OR))
                         return 1;
-                    }
                 }
             }
         }
     }
-    //free_commands(cmds);
     return 0;
-}
-
-void free_commands (struct command *cmds) {
-    int i, j;
-    for (i = 0; cmds[i].argv; i++) {
-        if(cmds[i].argv) {
-            for (j = 0; cmds[i].argv[j]; j++)
-                free(cmds[i].argv[j]);
-        }
-    }
-    free(cmds);
 }
 
 void shell (void) {
@@ -407,27 +456,19 @@ void shell (void) {
 
     while (1) {
         line = readLine();
-        if (!syntax_verifier(line)){
+        if (!syntax_verifier(line)) {
             free(line);
             fprintf(stderr, syntax_error_fmt, "'rN' or 'fN'");
-        }
-        line = spacer(line); /* puts spaces for special cases */
-        if(line!=NULL) {
+        } else if (line) {
             tokens = tokenize(line);
             cmd_ln = parse(tokens);
-            if (execute(cmd_ln) < 0) {
-                free_commands(cmd_ln.commands);
-                free(tokens);
-                free(line);
-                exit(1);
-            } else {
-                free_commands(cmd_ln.commands);
-                free(tokens);
-            }
+            execute(cmd_ln);
+
+            free(cmd_ln.commands);
+            free(tokens);
             free(line);
-            line=NULL;
-        } else {
-            free(line);
+            
+            line = NULL;
         }
     }
 }

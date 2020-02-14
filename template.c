@@ -1,4 +1,7 @@
-/* Mathieu Perron 20076170, Amine Sami */
+/*
+  Mathieu Perron 20076170
+  Amine   Sami   2008635
+*/
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -76,22 +79,23 @@ char* readLine (void) {
             len = insert_char(line, n++, ' ', len);
             if (len < 0)
                 return NULL;
-            
+
             len = insert_char(line, n++, (char) (p = c), len);
             if (len < 0)
                 return NULL;
-            
+
             while ((c = getchar()) == p) {
                 len = insert_char(line, n++, (char) c, len);
                 if (len < 0)
                     return NULL;
             }
-            
+
             if (c == EOF || c == '\n')
                 break;
 
             len = insert_char(line, n++, ' ', len);
         }
+
         len = insert_char(line, n++, (char) c, len);
         if (len < 0)
             return NULL;
@@ -101,7 +105,7 @@ char* readLine (void) {
         free(line);
         exit(0);
     }
-    
+
     line[n] = '\0'; /* null terminate string */
 
     return line;
@@ -109,7 +113,7 @@ char* readLine (void) {
 
 /* tokenize arguments */
 char **tokenize(char *str){
-    const char *delim = " \t\n()";
+    const char *delim = " \t\n";
     char **tokens, **saved, *next_tok;
     int i = 0, len = MIN_SIZE;
 
@@ -121,7 +125,7 @@ char **tokenize(char *str){
         fprintf(stderr, "could not initialize tokens array\n");
         return NULL;
     }
-    
+
     /* walk through other tokens */
     while (next_tok) {
         if (i == len - 1) {
@@ -137,105 +141,18 @@ char **tokenize(char *str){
         /* subsequent calls to strtok with the same string must pass NULL */
         next_tok = strtok(NULL, delim);
     }
-    
+
     tokens[i] = NULL;
 
     return tokens;
 }
-
-/*
-char **old_tokenize (void) {
-    char *string[256];
-    char **retstr;
-
-    // malloc the string for the return string value
-    retstr = malloc(sizeof(char *) * (i + 1));
-    // if memory error
-    if(retstr==NULL){
-        fprintf(stderr, "error lack of memory\n");
-        return NULL;
-    }
-    i = 0;
-    // copy the string to return string
-    while(string[i]!=NULL){
-        for(j=0; string[i][j]; j++);
-        retstr[i] = malloc(sizeof(char)*(j+1));
-        // if memory error
-        if(retstr[i]==NULL){
-            for(j=0; j<i; j++){
-                free(retstr[j]);
-            }
-            free(retstr);
-            fprintf(stderr, "error lack of memory\n");
-            return NULL;
-        }
-        strcpy(retstr[i], string[i]);
-        i++;
-    }
-    retstr[i]=NULL;
-    return retstr;
-}
-*/
-
-/* this method adds spaces so that echo a&&echo b is accepted as echo a && echo b */
-/*
-char *spacer(char *str){
-    char string[256];
-    char *result;
-    int i = 0;
-    int j = 0;
-
-    while(str[i]){
-        if(IS_SPECIAL(str[i])){
-            if(str[i+1]){
-                if(IS_SPECIAL(str[i+1])) {
-                    string[j++] = ' ';
-                    string[j++] = str[i++];
-                    string[j++] = str[i];
-                    string[j++] = ' ';
-                } else {
-                    char str2[2] = {str[i],str[i+1]};
-                    syntax_error(str2);
-                    free(str);
-                    return NULL;
-                }
-            } else if (!str[i+1]) {
-                string[j++]=' ';
-                string[j++]=str[i];
-                string[j++]=' ';
-            }
-            if(str[i+2] && IS_SPECIAL(str[i+2])){
-                char str6[6] = {str[i],str[i+1],str[i+2],'.','.','.'};
-                syntax_error(str6);
-                free(str);
-                return NULL;
-            }
-        } else {
-            string[j++]=str[i];
-        }
-        i++;
-    }
-    string[j]='\0';
-
-    result = malloc(sizeof(char)*(j+1));
-    if(!result){
-        fprintf(stderr, "lack of memory\n");
-        free(str);
-        return NULL;
-    }
-
-    strcpy(result, string);
-    free(str);
-    return result;
-}
-*/
 
 /* verify if rn and fn respect their given synthax */
 int verify_rnfn(char *str, char verifier){
     char *ret;
     int i = 0;
 
-    while((ret = strchr(str+i, verifier))){
+    while (ret = strchr(str+i, verifier)) {
         i = (int)(ret-str+1);
         if(isdigit(str[i++])){
             while(isdigit(str[i])) i++;
@@ -264,6 +181,7 @@ int syntax_verifier(char *str){
    types and other particularities */
 struct cmdline parse (char **tokens) {
     int i, j, k, n = 1;
+    char *cp;
     struct cmdline cmd_line;
     cmd_line.is_background = false;
 
@@ -308,47 +226,56 @@ struct cmdline parse (char **tokens) {
     }
 
     for (i=0; i<n; i++) {
+        cmd_line.commands[i].type = NORMAL;
         cmd_line.commands[i].rnfn = '0';
         cmd_line.commands[i].n = 0;
     }
 
     /* now create the right structures for commands */
     for (i = j = n = 0; tokens[i]; i++) {
-        /* if the argument is a and get arguments before the and and set type to AND */
-        if (tokens[i][0] == '&') {
+        /* removes parenthesis if rn or fn */
+        if ((cmd_line.commands[n].rnfn == 'f' ||
+             cmd_line.commands[n].rnfn == 'r') &&
+            (cp = strchr(tokens[i], ')'))) {
+            *cp = '\0';
+        } else if (tokens[i][0] == '&') {
+            /* if the argument is a and get arguments before the &&
+               and set type to AND */
             if (tokens[i][1])
                 cmd_line.commands[n].type = AND;
             else
                 cmd_line.is_background = true;
             cmd_line.commands[n++].argv = tokens + j;
-            tokens[i][0] = '\0';
             j = i;
             tokens[j++] = NULL;
         } else if (tokens[i][0] == '|' && tokens[i][1]) {
-        /* same for or */
+            /* same for || */
             cmd_line.commands[n].type = OR;
             cmd_line.commands[n++].argv = tokens + j;
-            tokens[i][0] = '\0';
             j = i;
             tokens[j++] = NULL;
-        }
-        
-        // also a integer and put the right execute logic for each cases
-        else if ((i == 0 || !tokens[i-1]) && (tokens[i][0]=='r' || tokens[i][0]=='f')) {
-            k=1;
-            while(tokens[i][k] && isdigit(tokens[i][k++]));
-            if(!tokens[i][k] && isdigit(tokens[i][k-1])) {
+        } else if ((i == 0 || !tokens[i-1]) &&
+                   (tokens[i][0]=='r' || tokens[i][0]=='f')) {
+            k = 1;
+            while(tokens[i][k] && isdigit(tokens[i][k]))
+                k++;
+            if(isdigit(tokens[i][k-1]) && tokens[i][k] == '(') {
                 cmd_line.commands[n].rnfn = (tokens[i][0] == 'f') ? 'f' : 'r';
+                tokens[i][k] = '\0';
                 cmd_line.commands[n].n = atoi(tokens[i] + 1);
-                tokens[i][0] = '\0';
+                if (!tokens[i][k+1]) {
+                    tokens[i++] = NULL;
+                } else {
+                    tokens[i] += k + 1;
+                }
                 j = i;
-                tokens[j++] = NULL;
             }
         }
     }
 
+    /* when is background command `tokens + j' contains "&" otherwise it
+       needs to be added to commands array */
     if (!cmd_line.is_background) {
-        cmd_line.commands[n].type = NORMAL;
         cmd_line.commands[n++].argv = tokens + j;
     }
 
@@ -381,7 +308,7 @@ int execute_cmd (struct command cmd) {
   execute & fork process
 */
 int execute (struct cmdline cmd_line) {
-    int i, ret;
+    int i, n, ret;
     pid_t pid;
     struct command *cmds = cmd_line.commands;
 
@@ -396,30 +323,13 @@ int execute (struct cmdline cmd_line) {
         }
     }
 
-    for (i = 0; cmds[i].argv != NULL; i++) {
+    for (i = 0; cmds[i].argv; i++) {
         if (cmds[i].rnfn == 'r' || cmds[i].rnfn == 'f') {
-            for (int a = 0; a < cmds[i].n; a++) {
+            for (n = 0; n < cmds[i].n; n++) {
                 ret = (cmds[i].rnfn == 'f') ? 0 : execute_cmd(cmds[i]);
-                if (ret < 0) {
-                    /* here if error in execvp or fork */
-                    //free_commands(cmds);
-                    /* exit after, we are inside child process or fork failed */
+                /* ret is only negative inside child_process which failed */
+                if (ret < 0)
                     return -1;
-                } else if (ret == 0) {
-                    if (cmds[i].type == OR) {
-                        while (cmds[i].argv && cmds[i].type != AND)
-                            i++;
-                        if (!(cmds[i].argv && cmds[i].type == AND))
-                            return 1;
-                    }
-                } else {
-                    if (cmds[i].type == AND) {
-                        while (cmds[i].argv && cmds[i].type != OR)
-                            i++;
-                        if (!(cmds[i].argv && cmds[i].type == OR))
-                            return 1;
-                    }
-                }
             }
         } else {
             ret = execute_cmd(cmds[i]);
@@ -427,65 +337,51 @@ int execute (struct cmdline cmd_line) {
                 /* here if error in execvp or fork */
                 /* exit after, we are inside child process or fork failed */
                 return -1;
-            } else if (ret == 0) {
-                if (cmds[i].type == OR) {
-                    while (cmds[i].argv && cmds[i].type != AND)
-                        i++;
-                    if (!(cmds[i].argv && cmds[i].type == AND)) {
-                        //free_commands(cmds);
-                        return 1;
-                    }
-                }
-            } else {
-                if (cmds[i].type == AND) {
-                    while (cmds[i].argv && cmds[i].type != OR)
-                        i++;
-                    if (!(cmds[i].argv && cmds[i].type == OR))
-                        return 1;
-                }
+            }
+        }
+
+        if (ret == 0) { /* here if success */
+            /* OR should eval until one success */
+            if (cmds[i].type == OR) {
+                /* skip until && */
+                while (cmds[i].argv && cmds[i].type != AND)
+                    i++;
+            }
+        } else { /* here if failure */
+            /* AND should eval until one failure */
+            if (cmds[i].type == AND) {
+                /* skip until || */
+                while (cmds[i].argv && cmds[i].type != OR)
+                    i++;
             }
         }
     }
+
     return 0;
 }
 
 void shell (void) {
-    char *line;
-    char **tokens;
+    int ret;
+    char *line, **tokens;
     struct cmdline cmd_ln;
 
     while (1) {
         line = readLine();
-        if (!syntax_verifier(line)) {
-            free(line);
-            fprintf(stderr, syntax_error_fmt, "'rN' or 'fN'");
-        } else if (line) {
+        if (line) {
             tokens = tokenize(line);
             cmd_ln = parse(tokens);
-            execute(cmd_ln);
+            ret = execute(cmd_ln);
 
             free(cmd_ln.commands);
             free(tokens);
             free(line);
-            
-            line = NULL;
+
+            if (ret < 0)
+                exit(0);
         }
+        line = NULL;
     }
 }
-/* temporary testing
-   for (i = 0; cmds[i].argv; i++) {
-   printf("argv: \n  ");
-   for (j = 0; cmds[i].argv[j]; j++)
-   printf("%s ", cmds[i].argv[j]);
-   puts("");
-   switch (cmds[i].type) {
-   case NORMAL: puts("NORMAL"); break;
-   case BACKGROUND: puts("BACKGROUND"); break;
-   case AND: puts("AND"); break;
-   case OR: puts("OR"); break;
-   }
-   }
-*/
 
 /*
  * Dont change main!

@@ -1,3 +1,4 @@
+/* Mathieu Perron 20076170, Amine Sami */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,9 +11,7 @@
 #define bool int
 
 #define MIN_STR 128
-#define IS_SPACE(c) ((c) == ' ' || (c) == '\t')
 #define IS_SPECIAL(c) ((c) == '&' || (c) == '|')
-#define INSIDE_WORD(c) (!(IS_SPECIAL(c) || IS_SPACE(c)))
 
 enum { NORMAL, AND, OR };
 
@@ -29,7 +28,6 @@ struct cmdline {
 };
 
 char *readLine (void);
-int count_tokens (char *);
 char **tokenize (char *);
 struct cmdline parse (char **);
 int execute (struct cmdline);
@@ -59,7 +57,7 @@ char* readLine (void) {
                according to `man 3 realloc` */
             line = (char*) realloc(line, sizeof(char) * len);
         }
-        line[n++] = c;
+        line[n++] = (char)c;
     }
 
     line[n] = '\0'; /* null terminate string */
@@ -80,7 +78,6 @@ char **tokenize(char *str){
 
     /* walk through other tokens */
     while( token != NULL ) {
-        //printf( " %s\n", token );
         string[i++]=token;
         token = strtok(NULL, s);
     }
@@ -88,10 +85,25 @@ char **tokenize(char *str){
 
     /* malloc the string for the return string value */
     retstr = malloc(sizeof(char *)*(i+1));
-    i=0;
+    /* if memory error */
+    if(retstr==NULL){
+        fprintf(stderr, "error lack of memory\n");
+        return NULL;
+    }
+    i = 0;
+    /* copy the string to return string */
     while(string[i]!=NULL){
         for(j=0; string[i][j]; j++);
         retstr[i] = malloc(sizeof(char)*(j+1));
+        /* if memory error */
+        if(retstr[i]==NULL){
+            for(j=0; j<i; j++){
+                free(retstr[j]);
+            }
+            free(retstr);
+            fprintf(stderr, "error lack of memory\n");
+            return NULL;
+        }
         strcpy(retstr[i], string[i]);
         i++;
     }
@@ -99,26 +111,35 @@ char **tokenize(char *str){
     return retstr;
 }
 
+/* this method adds spaces so that echo a&&echo b is accepted as echo a && echo b */
 char *spacer(char *str){
-    char string[1000];
+    char string[256];
     char *result;
     int i = 0;
     int j = 0;
 
     while(str[i]){
         if(IS_SPECIAL(str[i])){
-            if(str[i+1] && IS_SPECIAL(str[i+1])){
-                string[j++]=' ';
-                string[j++]=str[i++];
-                string[j++]=str[i];
-                string[j++]=' ';
+            if(str[i+1]){
+                if(IS_SPECIAL(str[i+1])) {
+                    string[j++] = ' ';
+                    string[j++] = str[i++];
+                    string[j++] = str[i];
+                    string[j++] = ' ';
+                } else {
+                    syntax_error();
+                    free(str);
+                    return NULL;
+                }
             } else if (!str[i+1]) {
                 string[j++]=' ';
                 string[j++]=str[i];
                 string[j++]=' ';
             }
             if(str[i+2] && IS_SPECIAL(str[i+2])){
-                return syntax_error(); // TODO not sure how to fix this
+                syntax_error();
+                free(str);
+                return NULL;
             }
         } else {
             string[j++]=str[i];
@@ -126,19 +147,19 @@ char *spacer(char *str){
         i++;
     }
     string[j]='\0';
-    for(i=0; string[i]; i++);
-    result = malloc(sizeof(char)*(i+1));
-    strncpy(result, string, i);
+    result = malloc(sizeof(char)*(j+1));
+    strcpy(result, string);
     printf("%s\n", result);
+    free(str);
     return result;
 }
 
 int verify_rnfn(char *str, char verifier){
     char *ret;
-    int i;
+    int i = 0;
     /* verify for rN */
     while((ret = strchr(str+i, verifier))){
-        i = ret-str+1;
+        i = (int)(ret-str+1);
         if(isdigit(str[i++])){
             while(isdigit(str[i])) i++;
             if(str[i]!='('){
@@ -154,7 +175,7 @@ int verify_rnfn(char *str, char verifier){
     return true;
 }
 
-/* verify syntax */
+/* verify very lightly the syntax for rN and fN */
 int syntax_verifier(char *str){
     /* verify for rN */
     if(!verify_rnfn(str, 'r') || !verify_rnfn(str, 'f')) return false;
@@ -164,6 +185,7 @@ int syntax_verifier(char *str){
 
 const char* syntax_error_fmt = "bash: syntax error near unexpected token `%s'\n";
 
+/* creates the cmdline structure that containes every commands with their types and other particularities */
 struct cmdline parse (char **tokens){
     int i, j, n = 1;
     struct cmdline cmd_line;
@@ -240,22 +262,15 @@ struct cmdline parse (char **tokens){
             }
             cmd_line.commands[n].rnfn = (tokens[i][0]=='f')?'f':'r';
             cmd_line.commands[n].n = atoi(tokens[i]+1);
-            //test
-            //printf("%d\n", cmd_line.commands[n].n);
+
             free(tokens[j = i]);
             tokens[j++] = NULL;
         }
     }
 
     if (!cmd_line.is_background) {
-        //TODO not necessary
-        if(cmd_line.commands[n].rnfn == 'r' || cmd_line.commands[n].rnfn == 'f'){
-            cmd_line.commands[n].type = NORMAL;
-            cmd_line.commands[n++].argv = tokens + j;
-        } else {
-            cmd_line.commands[n].type = NORMAL;
-            cmd_line.commands[n++].argv = tokens + j;
-        }
+        cmd_line.commands[n].type = NORMAL;
+        cmd_line.commands[n++].argv = tokens + j;
     }
 
     cmd_line.commands[n].argv = NULL; /* to know where the array ends */
@@ -266,7 +281,6 @@ struct cmdline parse (char **tokens){
 int execute_cmd (struct command cmd) {
     int child_code = 0;
     pid_t pid;
-    int n;
 
     pid = fork();
     if (pid < 0) {
@@ -278,7 +292,6 @@ int execute_cmd (struct command cmd) {
         fprintf(stderr, "bash: %s: command not found\n", cmd.argv[0]);
     } else {
         waitpid(pid, &child_code, 0);
-        /* printf("pid : %d, argv[0] : %s\n", pid, cmd.argv[0]); */
         child_code = WEXITSTATUS(child_code);
     }
 
@@ -287,9 +300,8 @@ int execute_cmd (struct command cmd) {
 }
 
 /*
-  il faut quon fork le process
-  pi dans le child process quon fasse le exec
-  pi dans lautre process faut quon check squi spasse */
+  execute & fork process
+*/
 int execute (struct cmdline cmd_line) {
     int i, ret;
     pid_t pid;
@@ -385,20 +397,28 @@ void shell (void) {
     char *line;
     char **tokens;
     struct cmdline cmd_ln;
-    //int i = 0, j = 0;
 
-    //TODO add fN and lN functions as demanded
     while (1) {
         line = readLine();
         if (!syntax_verifier(line)){
             fprintf(stderr, "syntax error\n");
         }
-        line = spacer(line);
-        tokens = tokenize(line);
+        line = spacer(line); /* puts spaces for special cases */
+        if(line) {
+            tokens = tokenize(line);
 
-        cmd_ln = parse(tokens);
-        if (execute(cmd_ln) < 0)
-            exit(1);
+            cmd_ln = parse(tokens);
+            if (execute(cmd_ln) < 0) {
+                free(line);
+                for(int i = 0; tokens[i]; i++){
+                    free(tokens[i]);
+                }
+                free(tokens);
+                exit(1);
+            }
+        } else {
+            free(line);
+        }
     }
 }
 /* temporary testing

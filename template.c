@@ -334,7 +334,7 @@ struct cmdline parse (char **tokens) {
         }
         
         // also a integer and put the right execute logic for each cases
-        else if (tokens[i][0]=='r' || tokens[i][0]=='f') {
+        else if ((i == 0 || !tokens[i-1]) && (tokens[i][0]=='r' || tokens[i][0]=='f')) {
             k=1;
             while(tokens[i][k] && isdigit(tokens[i][k++]));
             if(!tokens[i][k] && isdigit(tokens[i][k-1])) {
